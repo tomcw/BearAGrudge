@@ -51,11 +51,6 @@ INIT:
 	sta		saveAF
 
 	;
-	
-	lda		#<$4000+$1FF8	; dstEnd
-	sta		srcAY0End-2		; overwrite the Exomizer default
-	lda		#>$4000+$1FF8
-	sta		srcAY0End-1		; overwrite the Exomizer default
 
 	lda		#<srcAY0End
 	sta		_byte_lo
@@ -64,12 +59,6 @@ INIT:
 	cld
 	jsr		exod_decrunch
 
-	; fix this!
-	lda		#$a9
-	sta		$4000
-	lda		#$01
-	sta		$4001
-	
 	; append the end AY data marker
 
 	lda		#<AYDataEnd
