@@ -3,7 +3,7 @@
 !cpu 6502	; Compatible with all Apple2's
 !to "bearagrudge", plain
 !sl "bearagrudge.labels"
-*=$2000
+*=$6000
 
 AY_UPDATE_OLD = 0
 
@@ -15,6 +15,9 @@ AY_UPDATE_OLD = 0
 
 ;------------------------------------------------------------------------------
 
+pAYPattern = $f7
+pAYPatternL = pAYPattern
+pAYPatternH = $f8
 TmpL    = $f9	; alias with pAYData
 pAYData = $f9
 MBBase	= $fb
@@ -28,6 +31,10 @@ MBBaseH	= MBBase+1
 INIT:
 ;	+MB_Init1	RegE
 
+	lda		pAYPatternL
+	sta		saveF7
+	lda		pAYPatternH
+	sta		saveF8
 	lda		pAYData+0
 	sta		saveF9
 	lda		pAYData+1
@@ -111,11 +118,20 @@ GotMBSlot:
 
 	;
 
-	lda		AYPattern+1		; hi(compressedAY0End)
+	lda		#<AYPattern
+	sta		pAYPatternL
+	lda		#>AYPattern
+	sta		pAYPatternH
+
+	;
+
+	ldy		#1
+	lda		(pAYPattern),y	; hi(compressedAY0End)
 	sta		DN0+1
 	sta		$ff
 
-	lda		AYPattern+0		; lo(compressedAY0End)
+	dey
+	lda		(pAYPattern),y	; lo(compressedAY0End)
 	sta		DN1+1
 	sta		$fe
 
@@ -166,9 +182,11 @@ GotMBSlot:
 	lda		#>Interrupt				; ADDR_H 
 	sta		IRQH
 
-	lda		#<$4000
+	ldy		#2
+	lda		(pAYPattern),y
 	sta		pAYData+0
-	lda		#>$4000
+	iny
+	lda		(pAYPattern),y
 	sta		pAYData+1
 
 	lda		#0
@@ -244,6 +262,10 @@ done
 	lda		saveFF
 	sta		$ff
 
+	lda		saveF7
+	sta		pAYPatternL
+	lda		saveF8
+	sta		pAYPatternH
 	lda		saveF9
 	sta		pAYData+0
 	lda		saveFA
@@ -268,9 +290,9 @@ DN1	lda		#<compressedAY0End
 
 	; append the end AY data marker
 
-DN2	lda		#0					; dstEnd_h / compressedAY0End-1
+DN2	lda		#0					; dstEnd_h / (compressedAY0End-1)
 	sta		$ff
-DN3	lda		#0					; dstEnd_l / compressedAY0End-2
+DN3	lda		#0					; dstEnd_l / (compressedAY0End-2)
 	sta		$fe
 
 	ldy		#0
@@ -474,6 +496,8 @@ AYDataDoneFlag	!byte 0
 nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
 
+saveF7			!byte 0
+saveF8			!byte 0
 saveF9			!byte 0
 saveFA			!byte 0
 saveFB			!byte 0
@@ -538,13 +562,13 @@ compressedAY6End = *
 ;--------------------------------------
 
 AYPattern
-	!word compressedAY0End, $4000
-	!word compressedAY1End, $6000
-	!word compressedAY2End, $4000
-	!word compressedAY3End, $6000
-	!word compressedAY4End, $4000
-	!word compressedAY5End, $6000
-	!word compressedAY6End, $4000
+	!word compressedAY0End, $2000
+	!word compressedAY1End, $4000
+	!word compressedAY2End, $2000
+	!word compressedAY3End, $4000
+	!word compressedAY4End, $2000
+	!word compressedAY5End, $4000
+	!word compressedAY6End, $2000
 	!word $0000						; loop
 
 ;AYDataEnd
