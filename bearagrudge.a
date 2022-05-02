@@ -339,6 +339,26 @@ DN3	lda		#0					; dstEnd_l: *(compressedAYxEnd-2)
 	iny
 	sta		($fe),y
 
+!if 1{
+	sei
+
+	ldy		$ff
+	ldx		$fe
+	jsr		PRNTYX
+
+	lda		#$80+' '
+	jsr		COUT
+
+	ldy		pAYData+1
+	ldx		pAYData+0
+	jsr		PRNTYX
+
+	lda		#$80+$0d
+	jsr		COUT
+
+	cli
+}
+
 	rts
 
 ;--------------------------------------
