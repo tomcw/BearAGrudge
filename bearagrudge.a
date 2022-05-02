@@ -316,63 +316,10 @@ DecrunchNext
 
 	sty		AYPatternIdx_user
 
-	; Get the last 2 bytes from the compressed stream = {lo,hi} end addr of uncompress data
-	; NB. calling exod_decrunch() uses $fe,$ff, so use SMC to write the addr after the call
-
-	ldy		#0
-
-	lda		$fe
-	bne		+
-		dec		$ff
-+	dec		$fe
-	lda		($fe),y
-	sta		DN2+1				; hi(uncompressed end addr)
-
-	lda		$fe
-	bne		+
-		dec		$ff
-+	dec		$fe
-	lda		($fe),y
-	sta		DN3+1				; lo(uncompressed end addr)
-
 	;
 
 	cld
 	jsr		exod_decrunch		; NB. 0x684A6 cycles for chunk0
-
-	; Append the end AY data marker
-	; - todo: just include in the compressed stream?
-
-DN2	lda		#0					; dstEnd_h: *(compressedAYxEnd-1)
-	sta		$ff
-DN3	lda		#0					; dstEnd_l: *(compressedAYxEnd-2)
-	sta		$fe
-
-	ldy		#0
-	lda		#$ff				; end of chunk marker
-	sta		($fe),y
-	iny
-	sta		($fe),y
-
-!if 1{
-	sei
-
-	ldy		$ff
-	ldx		$fe
-	jsr		PRNTYX
-
-	lda		#$80+' '
-	jsr		COUT
-
-	ldy		pAYData+1
-	ldx		pAYData+0
-	jsr		PRNTYX
-
-	lda		#$80+$0d
-	jsr		COUT
-
-	cli
-}
 
 	rts
 
