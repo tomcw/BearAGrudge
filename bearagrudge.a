@@ -161,7 +161,6 @@ GotMBSlot:
 	jsr		NextAYChunk
 
 	lda		#0
-	sta		AYDataDoneFlag
 	sta		nFrameNum+0
 	sta		nFrameNum+1
 	sta		nFrameNum+2
@@ -169,9 +168,7 @@ GotMBSlot:
 
 	cli
 
-loop	lda		AYDataDoneFlag
-		bne		done
-		lda		State
+loop	lda		State
 		beq		+	; S_NO_WORK
 					; else: S_DECRUNCH_NEXT
 			; Decrunch take ~20 frames, and each compressed chunk takes 651*2 frames (since BearAGrudge plays back at 25Hz)
@@ -181,6 +178,9 @@ loop	lda		AYDataDoneFlag
 +		lda		$c000
 		bpl		loop
 		bit		$c010
+
+		cmp		#27+$80				; ESC to quit
+		beq		done
 
 pause	; step via one-shot mode
 		sei
@@ -217,9 +217,26 @@ pause	; step via one-shot mode
 		jmp		loop
 
 done
-	lda		#IER_CLR|IxR_TIMER1
-	ldy		#SY6522_IER	
-	sta		(MBBase),y				; Disable Timer1 IRQ
+	sei
+		lda		#AY_RESET
+		ldy		#SY6522_ORB
+		sta		(MBBase),y
+		ldy		#SY6522_ORB+$80
+		sta		(MBBase),y
+
+		lda		#ACR_ONESHOT
+		ldy		#SY6522_ACR
+		sta		(MBBase),y
+
+		ldy		#SY6522_IFR
+-			lda		(MBBase),y
+			and		#IxR_TIMER1
+			beq		-
+
+		lda		#IER_CLR|IxR_TIMER1
+		ldy		#SY6522_IER
+		sta		(MBBase),y				; Disable Timer1 IRQ
+	cli
 
 	lda		save9E
 	sta		$9e
@@ -408,9 +425,6 @@ Interrupt
 
 	;
 
-	lda		AYDataDoneFlag
-	bne		.done
-
 	lda		g_MusicUpdate
 	eor		#1
 	sta		g_MusicUpdate
@@ -456,7 +470,6 @@ MB6x		stx		CARD_BASE+SY6522_ORB	; Set INACTIVE
 	and		(pAYData),y
 	cmp		#$ff
 	bne		+
-;;		sta		AYDataDoneFlag
 		jsr		NextAYChunk
 		lda		#S_DECRUNCH_NEXT
 		sta		State				; signal to main-loop to decrunch next chunk
@@ -583,7 +596,6 @@ SF_GetTimerL:
 !zone data
 
 nMBBaseHi		!byte 0
-AYDataDoneFlag	!byte 0
 nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
 AYPatternIdx_user	!byte 0
@@ -678,8 +690,3 @@ AYPattern
 	!word compressedAY6End, $2000
 	!word compressedAY7End, $4000
 	!word $0000, $0000						; loop
-
-;AYDataEnd
-;	!byte $00,$00,$00,$00,$00,$00,$00,$3F,$00,$00,$00 ; Set all channels off
-;	!byte $ff,$ff
-;lenAYDataEnd = * - AYDataEnd
