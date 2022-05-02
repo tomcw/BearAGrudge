@@ -303,12 +303,10 @@ DecrunchNext
 
 	lda		(pAYPattern),y		; lo(compressedAYxEnd)
 	sta		_byte_lo
-	sta		$fe
 	iny
 
 	lda		(pAYPattern),y		; hi(compressedAYxEnd)
 	sta		_byte_hi
-	sta		$ff
 	iny
 
 	iny		; skip irq data
