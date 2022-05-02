@@ -29,8 +29,6 @@ MBBaseH	= MBBase+1
 ;--------------------------------------
 
 INIT:
-;	+MB_Init1	RegE
-
 	lda		pAYPatternL
 	sta		saveF7
 	lda		pAYPatternH
@@ -176,7 +174,7 @@ loop	lda		AYDataDoneFlag
 		lda		State
 		beq		+	; S_NO_WORK
 					; else: S_DECRUNCH_NEXT
-			; Decrunch take ~28 frames, and each compressed chunk is 774*2 frames (since BearAGrudge plays back at 25Hz)
+			; Decrunch take ~20 frames, and each compressed chunk takes 651*2 frames (since BearAGrudge plays back at 25Hz)
 			jsr		DecrunchNext
 			lda		#S_NO_WORK
 			sta		State
@@ -323,7 +321,7 @@ DecrunchNext
 	;
 
 	cld
-	jsr		exod_decrunch		; NB. 0x73EE9 cycles for chunk0
+	jsr		exod_decrunch		; NB. 0x684A6 cycles for chunk0
 
 	; Append the end AY data marker
 	; - todo: just include in the compressed stream?
@@ -657,11 +655,20 @@ compressedAY4End = *
 compressedAY5End = *
 !binary "bearagrudge-AY6-comp.bin"
 compressedAY6End = *
+!binary "bearagrudge-AY7-comp.bin"
+compressedAY7End = *
 
 ;--------------------------------------
 
+; 8 chunks of $1C00 bytes (except last one)
+; Defaulting to alternate $2000 / $4000 decompression buffers
+;
+; An even number of chunks is ok to just loop
+; - if odd number, then playback of last & decrunch of first will overlap!
+; - so would need to decompress to a non-default address (ie. overwrite last 2 bytes of compressed stream with new destination)
+
 AYPattern
-	; AYPatternIdx_user, AYPatternIdx_irq
+	; AYPatternIdx_user (left-hand column), AYPatternIdx_irq (right-hand column)
 	!word compressedAY0End, $2000
 	!word compressedAY1End, $4000
 	!word compressedAY2End, $2000
@@ -669,15 +676,7 @@ AYPattern
 	!word compressedAY4End, $2000
 	!word compressedAY5End, $4000
 	!word compressedAY6End, $2000
-	;
-	!word compressedAY0End, $4000			; repeat but using alt decompress buffer (otherwise AY6->AY0 will clobber buffer!)
-	!word compressedAY1End, $2000
-	!word compressedAY2End, $4000
-	!word compressedAY3End, $2000
-	!word compressedAY4End, $4000
-	!word compressedAY5End, $2000
-	!word compressedAY6End, $4000
-	;
+	!word compressedAY7End, $4000
 	!word $0000, $0000						; loop
 
 ;AYDataEnd
