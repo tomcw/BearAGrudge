@@ -123,35 +123,8 @@ GotMBSlot:
 	lda		#>AYPattern
 	sta		pAYPatternH
 
-	;
-
-	ldy		#1
-	lda		(pAYPattern),y	; hi(compressedAY0End)
-	sta		DN0+1
-	sta		$ff
-
-	dey
-	lda		(pAYPattern),y	; lo(compressedAY0End)
-	sta		DN1+1
-	sta		$fe
-
-	;
-
-	ldy		#0
-
-	lda		$fe
-	bne		+
-		dec		$ff
-+	dec		$fe
-	lda		($fe),y
-	sta		DN2+1			; hi(dstEnd)
-
-	lda		$fe
-	bne		+
-		dec		$ff
-+	dec		$fe
-	lda		($fe),y
-	sta		DN3+1			; lo(dstEnd)
+	lda		#0
+	sta		AYPatternIdx
 
 	jsr		DecrunchNext
 
@@ -182,12 +155,14 @@ GotMBSlot:
 	lda		#>Interrupt				; ADDR_H 
 	sta		IRQH
 
-	ldy		#2
+	ldy		AYPatternIdx
 	lda		(pAYPattern),y
 	sta		pAYData+0
 	iny
 	lda		(pAYPattern),y
 	sta		pAYData+1
+	iny
+	sty		AYPatternIdx
 
 	lda		#0
 	sta		AYDataDoneFlag
@@ -281,10 +256,41 @@ done
 
 DecrunchNext
 
-DN0	lda		#>compressedAY0End
-	sta		_byte_hi
-DN1	lda		#<compressedAY0End
+	ldy		AYPatternIdx
+
+	lda		(pAYPattern),y	; lo(compressedAYxEnd)
 	sta		_byte_lo
+	sta		$fe
+	iny
+
+	lda		(pAYPattern),y		; hi(compressedAYxEnd)
+	sta		_byte_hi
+	sta		$ff
+	iny
+
+	sty		AYPatternIdx
+
+	; get the last 2 bytes from the compressed stream = {lo,hi} end addr of uncompress data
+	; NB. exod_decrunch() uses $fe,$ff, so use SMC to write the addr after the call
+
+	ldy		#0
+
+	lda		$fe
+	bne		+
+		dec		$ff
++	dec		$fe
+	lda		($fe),y
+	sta		DN2+1				; hi(uncompressed end addr)
+
+	lda		$fe
+	bne		+
+		dec		$ff
++	dec		$fe
+	lda		($fe),y
+	sta		DN3+1				; lo(uncompressed end addr)
+
+	;
+
 	cld
 	jsr		exod_decrunch		; NB. 0x73EE9 cycles for chunk0
 
@@ -495,6 +501,7 @@ nMBBaseHi		!byte 0
 AYDataDoneFlag	!byte 0
 nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
+AYPatternIdx	!byte 0
 
 saveF7			!byte 0
 saveF8			!byte 0
