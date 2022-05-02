@@ -118,15 +118,20 @@ GotMBSlot:
 
 	;
 
+	; pAYPatternL/H - is used by both userland & irq, but it's setup just once (here) and remains constant
+	; It's referenced via variables: AYPatternIdx_user & AYPatternIdx_irq
 	lda		#<AYPattern
 	sta		pAYPatternL
 	lda		#>AYPattern
 	sta		pAYPatternH
 
-	lda		#0
-	sta		AYPatternIdx
+	jsr		ResetAYPattern_user
+	jsr		ResetAYPattern_irq
 
 	jsr		DecrunchNext
+
+	lda		#S_DECRUNCH_NEXT
+	sta		State					; signal to main-loop to decrunch a 2nd chunk
 
 	;
 
@@ -155,14 +160,7 @@ GotMBSlot:
 	lda		#>Interrupt				; ADDR_H 
 	sta		IRQH
 
-	ldy		AYPatternIdx
-	lda		(pAYPattern),y
-	sta		pAYData+0
-	iny
-	lda		(pAYPattern),y
-	sta		pAYData+1
-	iny
-	sty		AYPatternIdx
+	jsr		NextAYChunk
 
 	lda		#0
 	sta		AYDataDoneFlag
@@ -175,7 +173,14 @@ GotMBSlot:
 
 loop	lda		AYDataDoneFlag
 		bne		done
-		lda		$c000
+		lda		State
+		beq		+	; S_NO_WORK
+					; else: S_DECRUNCH_NEXT
+			; Decrunch take ~28 frames, and each compressed chunk is 774*2 frames (since BearAGrudge plays back at 25Hz)
+			jsr		DecrunchNext
+			lda		#S_NO_WORK
+			sta		State
++		lda		$c000
 		bpl		loop
 		bit		$c010
 
@@ -254,11 +259,34 @@ done
 
 ;--------------------------------------
 
+ResetAYPattern_user
+	lda		#0
+	sta		AYPatternIdx_user
+	rts
+
+ResetAYPattern_irq
+	lda		#2
+	sta		AYPatternIdx_irq
+	rts
+
+;--------------------------------------
+
 DecrunchNext
 
-	ldy		AYPatternIdx
+	; Check for $00,$00 = end of pattern
+	ldy		AYPatternIdx_user
+	lda		(pAYPattern),y
+	iny
+	ora		(pAYPattern),y
+	bne		+
+		jsr		ResetAYPattern_user
++
 
-	lda		(pAYPattern),y	; lo(compressedAYxEnd)
+	;
+
+	ldy		AYPatternIdx_user
+
+	lda		(pAYPattern),y		; lo(compressedAYxEnd)
 	sta		_byte_lo
 	sta		$fe
 	iny
@@ -268,10 +296,13 @@ DecrunchNext
 	sta		$ff
 	iny
 
-	sty		AYPatternIdx
+	iny		; skip irq data
+	iny
 
-	; get the last 2 bytes from the compressed stream = {lo,hi} end addr of uncompress data
-	; NB. exod_decrunch() uses $fe,$ff, so use SMC to write the addr after the call
+	sty		AYPatternIdx_user
+
+	; Get the last 2 bytes from the compressed stream = {lo,hi} end addr of uncompress data
+	; NB. calling exod_decrunch() uses $fe,$ff, so use SMC to write the addr after the call
 
 	ldy		#0
 
@@ -294,11 +325,12 @@ DecrunchNext
 	cld
 	jsr		exod_decrunch		; NB. 0x73EE9 cycles for chunk0
 
-	; append the end AY data marker
+	; Append the end AY data marker
+	; - todo: just include in the compressed stream?
 
-DN2	lda		#0					; dstEnd_h / (compressedAY0End-1)
+DN2	lda		#0					; dstEnd_h: *(compressedAYxEnd-1)
 	sta		$ff
-DN3	lda		#0					; dstEnd_l / (compressedAY0End-2)
+DN3	lda		#0					; dstEnd_l: *(compressedAYxEnd-2)
 	sta		$fe
 
 	ldy		#0
@@ -306,6 +338,38 @@ DN3	lda		#0					; dstEnd_l / (compressedAY0End-2)
 	sta		($fe),y
 	iny
 	sta		($fe),y
+
+	rts
+
+;--------------------------------------
+
+NextAYChunk
+
+	; Check for $00,$00 = end of pattern
+	ldy		AYPatternIdx_irq
+	lda		(pAYPattern),y
+	iny
+	ora		(pAYPattern),y
+	bne		+
+		jsr		ResetAYPattern_irq
++
+
+	;
+
+	ldy		AYPatternIdx_irq
+
+	lda		(pAYPattern),y
+	sta		pAYData+0
+	iny
+
+	lda		(pAYPattern),y
+	sta		pAYData+1
+	iny
+
+	iny		; skip userland data
+	iny
+
+	sty		AYPatternIdx_irq
 
 	rts
 
@@ -374,7 +438,10 @@ MB6x		stx		CARD_BASE+SY6522_ORB	; Set INACTIVE
 	and		(pAYData),y
 	cmp		#$ff
 	bne		+
-		sta		AYDataDoneFlag
+;;		sta		AYDataDoneFlag
+		jsr		NextAYChunk
+		lda		#S_DECRUNCH_NEXT
+		sta		State				; signal to main-loop to decrunch next chunk
 +
 
 	;
@@ -501,7 +568,12 @@ nMBBaseHi		!byte 0
 AYDataDoneFlag	!byte 0
 nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
-AYPatternIdx	!byte 0
+AYPatternIdx_user	!byte 0
+AYPatternIdx_irq	!byte 0
+
+S_NO_WORK = 0
+S_DECRUNCH_NEXT = 1
+State			!byte S_NO_WORK
 
 saveF7			!byte 0
 saveF8			!byte 0
@@ -569,6 +641,7 @@ compressedAY6End = *
 ;--------------------------------------
 
 AYPattern
+	; AYPatternIdx_user, AYPatternIdx_irq
 	!word compressedAY0End, $2000
 	!word compressedAY1End, $4000
 	!word compressedAY2End, $2000
@@ -576,7 +649,16 @@ AYPattern
 	!word compressedAY4End, $2000
 	!word compressedAY5End, $4000
 	!word compressedAY6End, $2000
-	!word $0000						; loop
+	;
+	!word compressedAY0End, $4000			; repeat but using alt decompress buffer (otherwise AY6->AY0 will clobber buffer!)
+	!word compressedAY1End, $2000
+	!word compressedAY2End, $4000
+	!word compressedAY3End, $2000
+	!word compressedAY4End, $4000
+	!word compressedAY5End, $2000
+	!word compressedAY6End, $4000
+	;
+	!word $0000, $0000						; loop
 
 ;AYDataEnd
 ;	!byte $00,$00,$00,$00,$00,$00,$00,$3F,$00,$00,$00 ; Set all channels off
