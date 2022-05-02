@@ -599,23 +599,44 @@ _byte_skip_hi:
 
 ;--------------------------------------
 
+USE_CHUNKS_WITH_APPLEII_PERIODS = 1
+
 AYDataCompressed
-!binary "bearagrudge-AY0-comp.bin"
-compressedAY0End = *
-!binary "bearagrudge-AY1-comp.bin"
-compressedAY1End = *
-!binary "bearagrudge-AY2-comp.bin"
-compressedAY2End = *
-!binary "bearagrudge-AY3-comp.bin"
-compressedAY3End = *
-!binary "bearagrudge-AY4-comp.bin"
-compressedAY4End = *
-!binary "bearagrudge-AY5-comp.bin"
-compressedAY5End = *
-!binary "bearagrudge-AY6-comp.bin"
-compressedAY6End = *
-!binary "bearagrudge-AY7-comp.bin"
-compressedAY7End = *
+!if USE_CHUNKS_WITH_APPLEII_PERIODS{
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY0-comp.bin"
+	compressedAY0End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY1-comp.bin"
+	compressedAY1End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY2-comp.bin"
+	compressedAY2End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY3-comp.bin"
+	compressedAY3End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY4-comp.bin"
+	compressedAY4End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY5-comp.bin"
+	compressedAY5End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY6-comp.bin"
+	compressedAY6End = *
+	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY7-comp.bin"
+	compressedAY7End = *
+} else {
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY0-comp.bin"
+	compressedAY0End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY1-comp.bin"
+	compressedAY1End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY2-comp.bin"
+	compressedAY2End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY3-comp.bin"
+	compressedAY3End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY4-comp.bin"
+	compressedAY4End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY5-comp.bin"
+	compressedAY5End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY6-comp.bin"
+	compressedAY6End = *
+	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY7-comp.bin"
+	compressedAY7End = *
+}
 
 ;--------------------------------------
 
