@@ -11,3 +11,12 @@ chunks | chunk size | total compressed size
 8| 7,163 x 7 + 5,150(*) | 9,148
 
 (*) total = 55,275 + 16: the extra 16 = 8x{FF,FF} end marker bytes.
+
+Pre-pack the 11 bytes of AY regs into 8 bytes:
+
+chunks | chunk size | total compressed size
+-|-|-
+1| 40,202 | 7,382
+5| 8,186 x 6 + 7,466 | 7,933
+6| 7,170 x 5 + 4,362 | 9,993
+6| 8,186 x 4 + 3,738 + 3,730 | 9,773
