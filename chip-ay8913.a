@@ -1,0 +1,215 @@
+;license:MIT
+;(c) 2021 by Tom Charlesworth
+;
+; AY8913 related
+;
+
+;------------------------------------------------------------------------------
+
+DetectAY8913
+; Pre: zpTmp1 = 6522 bitmap in b1:0
+;	hasAY8913 = 0
+;	isPhasorCard
+; Post:
+;	hasAY8913 = %00,%01,%10,%11 (or %1111 for Phasor)
+
+	lda		isPhasorCard
+	beq		+
+		lda		#PH_MOCKINGBOARD
+		jsr		SetPhasorMode
++
+
+!if 0 {		; comment out this mb-audit specific code
+	lda		isMB4C
+	ora		isEchoPlus
+	beq		+
+		lda		#%00000011
+		sta		hasAY8913		; can't test them, so just assume they are all working
+		rts
++
+}
+
+	lda		#SY6522_A_BASE
+	sta		zpTmp3
+	lda		#1					; hasAY8913 mask
+	sta		zpTmp2
+
+-		lsr		zpTmp1			; 6522 at this addr?
+		bcc		+
+
+		jsr		Init6522ForAY
+
+		lda		#AY_AFINE
+		ldx		#$AA
+		jsr		AY_WriteRegValue
+
+		lda		#AY_BFINE
+		ldx		#$55
+		jsr		AY_WriteRegValue
+
+		lda		#AY_CFINE
+		ldx		#$69
+		jsr		AY_WriteRegValue
+
+		;
+
+		ldx		#AY_AFINE
+		jsr		AY_ReadRegValue
+		cmp		#$AA
+		bne		+
+
+		ldx		#AY_BFINE
+		jsr		AY_ReadRegValue
+		cmp		#$55
+		bne		+
+
+		ldx		#AY_CFINE
+		jsr		AY_ReadRegValue
+		cmp		#$69
+		bne		+
+
+			lda		hasAY8913
+			ora		zpTmp2
+			sta		hasAY8913
+
++		asl		zpTmp2			; mask <<= 1
+		lda		zpTmp3
+		eor		#$80
+		sta		zpTmp3
+		bne		-
+
+	lda		isPhasorCard
+	beq		+
+	lda		#%00000011
+	cmp		hasAY8913
+	bne		+
+		lda		#%00001111
+		sta		hasAY8913
++
+
+	rts
+
+;------------------------------------------------------------------------------
+
+Init6522ForAY
+; Pre: phasorMode
+;	zpTmp3 = SY6522_A_BASE or SY6522_A_PH_BASE or SY6522_B_BASE
+; Post: Y = SY6522_ORA for chip A or B
+
+	lda		#SY6522_DDRB
+	ora		zpTmp3
+	tay
+	lda		phasorMode
+	cmp		#PH_PHASOR
+	beq		+
+		lda		#$07
+		bne		++
++		lda		#$1f
+++	sta		(MBBase),y
+
+	lda		#SY6522_DDRA
+	ora		zpTmp3
+	tay
+	lda		#$ff	; output
+	sta		(MBBase),y
+
+	ldy		zpTmp3
+	jmp		SF_ChipReset		; Post: Y=SY6522_ORA for chip A or B
+
+	;
+
+AY_WriteRegValue
+; Pre: Y = SY6522_ORA for chip A or B
+;	A=reg#
+;	X=value
+; Post: Y = SY6522_ORA for chip A or B
+	jsr		SF_SelectReg
+	txa
+	jmp		SF_WriteReg
+
+AY_ReadRegValue
+; Pre: Y = SY6522_ORA for chip A or B
+;	X=reg#
+; Post: Y = SY6522_ORA for chip A or B
+;	A=value
+	jsr		AY_SetPortAOutput
+	txa
+	jsr		SF_SelectReg
+	jsr		AY_SetPortAInput
+	jmp		AY_ReadReg
+
+	;
+
+AY_SetPortAOutput
+; Pre: Y = SY6522_ORA for chip A or B
+; Post: Y = SY6522_ORA for chip A or B
+	iny
+	iny		; Y = DDRA
+	lda		#$ff
+	sta		(MBBase),y
+	dey
+	dey		; Y = ORA
+	rts
+
+AY_SetPortAInput
+; Pre: Y = SY6522_ORA for chip A or B
+; Post: Y = SY6522_ORA for chip A or B
+	iny
+	iny		; Y = DDRA
+	lda		#$0
+	sta		(MBBase),y
+	dey
+	dey		; Y = ORA
+	rts
+
+	;
+
+AY_ReadReg
+; Pre: Y = SY6522_ORA for chip A or B
+;	6522.DDRA = $00 (Port-A direction = input)
+; Post: Y = SY6522_ORA for chip A or B
+;	A = data
+	lda		#AY_READ
+	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	lda		(MBBase),y		; Read Port-A
+	tax
+	lda		#AY_INACTIVE
+	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	txa
+	rts
+
+SF_SelectReg
+; Pre: Y = SY6522_ORA for chip A or B
+;	A = reg#
+; Post: Y = SY6522_ORA for chip A or B
+	sta		(MBBase),y
+	lda		#AY_LATCH
+	bne		+
+
+SF_WriteReg
+; Pre: Y = SY6522_ORA for chip A or B
+;	6522.DDRA = $FF (Port-A direction = output)
+;	A = data
+; Post: Y = SY6522_ORA for chip A or B
+	sta		(MBBase),y
+	lda		#AY_WRITE
+	bne		+
+
+SF_ChipReset
+; NB. For native Phasor mode, reset both AY's, since cmd=AY_RESET|(%00<<3) - and CS is active low
+; Pre: Y = SY6522_A_BASE or SY6522_B_BASE
+; Post: Y = SY6522_ORA for chip A or B
+	lda		#AY_RESET
+	beq		++
+
++	dey		; Y = ORB (reg#0)
+
+++	sta		(MBBase),y
+	lda		#AY_INACTIVE
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	rts
