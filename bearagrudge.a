@@ -6,6 +6,7 @@
 *=$6000
 
 USE_PACKED_8_BYTE_AY_SETS = 1
+USE_ODD_NUMBER_OF_COMPRESSED_CHUNKS = 1
 
 ;------------------------------------------------------------------------------
 
@@ -20,9 +21,15 @@ pAYPatternL = pAYPattern
 pAYPatternH = $f8
 TmpL    = $f9	; alias with pAYData
 pAYData = $f9
+pAYDataL = pAYData
+pAYDataH = pAYData+1
 MBBase	= $fb
 MBBaseL	= MBBase
 MBBaseH	= MBBase+1
+
+zpTmp	= $fe	; use from user-land (also used by exod_decrunch - so can't use from IRQ handler)
+zpTmpL	= zpTmp
+zpTmpH	= zpTmp+1
 
 !zone code
 
@@ -124,8 +131,11 @@ GotMBSlot:
 	lda		#>AYPattern
 	sta		pAYPatternH
 
-	jsr		ResetAYPattern_user
-	jsr		ResetAYPattern_irq
+	jsr		ResetAYPattern
+
+	lda		#$20
+	sta		NextAYChunkAddr_H_user
+	sta		NextAYChunkAddr_H_irq
 
 	jsr		DecrunchNext
 
@@ -175,7 +185,7 @@ GotMBSlot:
 loop	lda		State
 		beq		+	; S_NO_WORK
 					; else: S_DECRUNCH_NEXT
-			; Decrunch take ~20 frames, and each compressed chunk takes 651*2 frames (since BearAGrudge plays back at 25Hz)
+			; Decrunch take ~20 frames, and each uncompressed chunk takes 651*2 frames (since BearAGrudge plays back at 25Hz)
 			jsr		DecrunchNext
 			lda		#S_NO_WORK
 			sta		State
@@ -299,82 +309,85 @@ done
 
 ;--------------------------------------
 
-ResetAYPattern_user
+ResetAYPattern
 	lda		#0
-	sta		AYPatternIdx_user
-	rts
-
-ResetAYPattern_irq
-	lda		#2
-	sta		AYPatternIdx_irq
+	sta		AYPatternIdx
 	rts
 
 ;--------------------------------------
 
+; Called from user-land
 DecrunchNext
 
 	; Check for $00,$00 = end of pattern
-	ldy		AYPatternIdx_user
+	ldy		AYPatternIdx
 	lda		(pAYPattern),y
 	iny
 	ora		(pAYPattern),y
 	bne		+
-		jsr		ResetAYPattern_user
+		jsr		ResetAYPattern
 +
 
 	;
+	; At the end of the compressed chunk, set the correct endAddress_h to decrunch to (decrunch occurs backwards)
+	; . With an odd number of compressed chunks, then for each loop of the tune, chunks will alternate decrunching to $2000 or $4000
+	;   eg. 1st time, chunk0 will decrunch to $2000; 2nd time it'll decrunch to $4000, etc
 
-	ldy		AYPatternIdx_user
+	ldy		AYPatternIdx
 
 	lda		(pAYPattern),y		; lo(compressedAYxEnd)
+	sta		zpTmpL
+	iny
+	lda		(pAYPattern),y		; hi(compressedAYxEnd)
+	sta		zpTmpH
+
+	ldy		#0
+	lda		(zpTmp),y				; endAddr_h
+	and		#$1f					; clr old $20 or $40
+	ora		NextAYChunkAddr_H_user	; set new $20 or $40
+	sta		(zpTmp),y
+
+	lda		NextAYChunkAddr_H_user
+	eor		#$60				; toggle: $20->$40 / $40->$20
+	sta		NextAYChunkAddr_H_user
+
+	;
+
+	ldy		AYPatternIdx
+
+	clc
+	lda		(pAYPattern),y		; lo(compressedAYxEnd)
+	adc		#COMPRESSED_CHUNK_END_ADJUST
 	sta		_byte_lo
 	iny
 
 	lda		(pAYPattern),y		; hi(compressedAYxEnd)
+	adc		#0
 	sta		_byte_hi
 	iny
 
-	iny		; skip irq data
-	iny
-
-	sty		AYPatternIdx_user
+	sty		AYPatternIdx
 
 	;
 
 	cld
-	jsr		exod_decrunch		; NB. 0x684A6 cycles for chunk0
+	jsr		exod_decrunch		; NB. 0x8138C cycles for chunk0
 
 	rts
 
 ;--------------------------------------
 
+; Called from IRQ handler
 NextAYChunk
 
-	; Check for $00,$00 = end of pattern
-	ldy		AYPatternIdx_irq
-	lda		(pAYPattern),y
-	iny
-	ora		(pAYPattern),y
-	bne		+
-		jsr		ResetAYPattern_irq
-+
+	lda		#0
+	sta		pAYDataL
 
-	;
+	lda		NextAYChunkAddr_H_irq
+	sta		pAYDataH
 
-	ldy		AYPatternIdx_irq
-
-	lda		(pAYPattern),y
-	sta		pAYData+0
-	iny
-
-	lda		(pAYPattern),y
-	sta		pAYData+1
-	iny
-
-	iny		; skip userland data
-	iny
-
-	sty		AYPatternIdx_irq
+	eor		#$60				; toggle: $20->$40 / $40->$20
+	sta		NextAYChunkAddr_H_irq
 
 	rts
 
@@ -716,8 +729,9 @@ nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
 g_AYSelect		!byte 3		; bit1=AY#1, bit0=AY#0
 g_PauseEnabled	!byte 0
-AYPatternIdx_user	!byte 0
-AYPatternIdx_irq	!byte 0
+AYPatternIdx	!byte 0
+NextAYChunkAddr_H_user	!byte 0
+NextAYChunkAddr_H_irq	!byte 0
 
 S_NO_WORK = 0
 S_DECRUNCH_NEXT = 1
@@ -778,23 +792,36 @@ USE_CHUNKS_WITH_APPLEII_PERIODS = 1
 
 AYDataCompressed
 !if USE_PACKED_8_BYTE_AY_SETS {
-  !if USE_CHUNKS_WITH_APPLEII_PERIODS{
-	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY0-comp.bin"
-	compressedAY0End = *
-	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY1-comp.bin"
-	compressedAY1End = *
-	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY2-comp.bin"
-	compressedAY2End = *
-	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY3-comp.bin"
-	compressedAY3End = *
-	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY4-comp.bin"
-	compressedAY4End = *
-	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY5-comp.bin"
-	compressedAY5End = *
+  !if USE_CHUNKS_WITH_APPLEII_PERIODS {
+    !if USE_ODD_NUMBER_OF_COMPRESSED_CHUNKS {
+		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY0-comp.bin"
+		compressedAY0End = *
+		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY1-comp.bin"
+		compressedAY1End = *
+		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY2-comp.bin"
+		compressedAY2End = *
+		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY3-comp.bin"
+		compressedAY3End = *
+		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY4-comp.bin"
+		compressedAY4End = *
+    } else {
+		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY0-comp.bin"
+		compressedAY0End = *
+		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY1-comp.bin"
+		compressedAY1End = *
+		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY2-comp.bin"
+		compressedAY2End = *
+		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY3-comp.bin"
+		compressedAY3End = *
+		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY4-comp.bin"
+		compressedAY4End = *
+		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY5-comp.bin"
+		compressedAY5End = *
+	}
   } else {
   }
 } else {
-  !if USE_CHUNKS_WITH_APPLEII_PERIODS{
+  !if USE_CHUNKS_WITH_APPLEII_PERIODS {
 	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY0-comp.bin"
 	compressedAY0End = *
 	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY1-comp.bin"
@@ -833,13 +860,26 @@ AYDataCompressed
 
 ;--------------------------------------
 
-; 6 or 8 chunks of $1C00 bytes (except last one)
+; 5, 6 or 8 chunks of $1C00 or $2000 bytes (except last one)
 ; Defaulting to alternate $2000 / $4000 decompression buffers
 ;
 ; An even number of chunks is ok to just loop
 ; - if odd number, then playback of last & decrunch of first will overlap!
 ; - so would need to decompress to a non-default address (ie. overwrite last 2 bytes of compressed stream with new destination)
 
+!if USE_ODD_NUMBER_OF_COMPRESSED_CHUNKS {
+
+COMPRESSED_CHUNK_END_ADJUST = 1	; point at endAddr_h to decrunch to (NB. decrunch startAddr is always $0000)
+
+AYPattern
+	; AYPatternIdx
+	!word compressedAY0End-COMPRESSED_CHUNK_END_ADJUST
+	!word compressedAY1End-COMPRESSED_CHUNK_END_ADJUST
+	!word compressedAY2End-COMPRESSED_CHUNK_END_ADJUST
+	!word compressedAY3End-COMPRESSED_CHUNK_END_ADJUST
+	!word compressedAY4End-COMPRESSED_CHUNK_END_ADJUST
+	!word $0000								; loop
+} else {
 AYPattern
 	; AYPatternIdx_user (left-hand column), AYPatternIdx_irq (right-hand column)
 	!word compressedAY0End, $2000
@@ -848,8 +888,9 @@ AYPattern
 	!word compressedAY3End, $4000
 	!word compressedAY4End, $2000
 	!word compressedAY5End, $4000
-!if USE_PACKED_8_BYTE_AY_SETS = 0 {
+  !if USE_PACKED_8_BYTE_AY_SETS = 0 {
 	!word compressedAY6End, $2000
 	!word compressedAY7End, $4000
-}
+  }
 	!word $0000, $0000						; loop
+}

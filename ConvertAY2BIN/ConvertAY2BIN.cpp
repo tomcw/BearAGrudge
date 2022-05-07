@@ -101,7 +101,7 @@ int Write(std::vector<uint8_t>&outputRegisters, const int numRegsInSet)
 		lengthRemaining -= length;
 		chunkNumber++;
 
-#if 1
+#if 0
 		// Check if last chunk will result in odd number of chunks
 		// - if so, then output 2 smaller equal-size chunks
 		if (lengthRemaining < chunkSize && ((chunkNumber & 1) == 0))
