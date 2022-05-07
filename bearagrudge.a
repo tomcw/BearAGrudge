@@ -5,9 +5,6 @@
 !sl "bearagrudge.labels"
 *=$6000
 
-USE_PACKED_8_BYTE_AY_SETS = 1
-USE_ODD_NUMBER_OF_COMPRESSED_CHUNKS = 1
-
 ;------------------------------------------------------------------------------
 
 !source "AppleDefs.a"
@@ -415,7 +412,6 @@ Interrupt
 	jmp		.done
 +
 
-!if USE_PACKED_8_BYTE_AY_SETS {
 	;
 	; Unpack the regs: 8 -> 11 bytes
 	;
@@ -483,7 +479,6 @@ Interrupt
 	lda		(pAYData),y
 	ldx		#7
 	sta		g_UnpackedRegs,x
-}
 
 	;
 
@@ -503,11 +498,7 @@ MB1x		sty		CARD_BASE+SY6522_ORA
 			lda		#AY_LATCH
 MB2x		sta		CARD_BASE+SY6522_ORB
 MB3x		stx		CARD_BASE+SY6522_ORB	; Set INACTIVE
-!if USE_PACKED_8_BYTE_AY_SETS {
 			lda		g_UnpackedRegs,y
-} else {
-			lda		(pAYData),y
-}
 !if 1 {		; Noise Period: Convert ZX to MB
 			cpy		#AY_NOISEPER
 			bne		+
@@ -549,11 +540,7 @@ MB1y		sty		CARD_BASE+SY6522_B_BASE+SY6522_ORA
 			lda		#AY_LATCH
 MB2y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORB
 MB3y		stx		CARD_BASE+SY6522_B_BASE+SY6522_ORB	; Set INACTIVE
-!if USE_PACKED_8_BYTE_AY_SETS {
 			lda		g_UnpackedRegs,y
-} else {
-			lda		(pAYData),y
-}
 !if 1 {		; Noise Period: Convert ZX to MB
 			cpy		#AY_NOISEPER
 			bne		+
@@ -586,11 +573,7 @@ muteAY1
 
 	clc
 	lda		pAYData+0
-!if USE_PACKED_8_BYTE_AY_SETS {
 	adc		#8						; AY regs packed into 8-byte sets
-} else {
-	adc		#AY_EFINE
-}
 	sta		pAYData+0
 	lda		pAYData+1
 	adc		#0
@@ -737,9 +720,7 @@ S_NO_WORK = 0
 S_DECRUNCH_NEXT = 1
 State			!byte S_NO_WORK
 
-!if USE_PACKED_8_BYTE_AY_SETS {
 g_UnpackedRegs	!fill 11,0
-}
 
 saveF7			!byte 0
 saveF8			!byte 0
@@ -791,83 +772,29 @@ _byte_skip_hi:
 USE_CHUNKS_WITH_APPLEII_PERIODS = 1
 
 AYDataCompressed
-!if USE_PACKED_8_BYTE_AY_SETS {
-  !if USE_CHUNKS_WITH_APPLEII_PERIODS {
-    !if USE_ODD_NUMBER_OF_COMPRESSED_CHUNKS {
-		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY0-comp.bin"
-		compressedAY0End = *
-		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY1-comp.bin"
-		compressedAY1End = *
-		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY2-comp.bin"
-		compressedAY2End = *
-		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY3-comp.bin"
-		compressedAY3End = *
-		!binary "ChunksWithAppleIIPeriods-Packed-5\\bearagrudge-AY4-comp.bin"
-		compressedAY4End = *
-    } else {
-		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY0-comp.bin"
-		compressedAY0End = *
-		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY1-comp.bin"
-		compressedAY1End = *
-		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY2-comp.bin"
-		compressedAY2End = *
-		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY3-comp.bin"
-		compressedAY3End = *
-		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY4-comp.bin"
-		compressedAY4End = *
-		!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY5-comp.bin"
-		compressedAY5End = *
-	}
-  } else {
-  }
+!if USE_CHUNKS_WITH_APPLEII_PERIODS {
+	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY0-comp.bin"
+	compressedAY0End = *
+	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY1-comp.bin"
+	compressedAY1End = *
+	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY2-comp.bin"
+	compressedAY2End = *
+	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY3-comp.bin"
+	compressedAY3End = *
+	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY4-comp.bin"
+	compressedAY4End = *
 } else {
-  !if USE_CHUNKS_WITH_APPLEII_PERIODS {
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY0-comp.bin"
-	compressedAY0End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY1-comp.bin"
-	compressedAY1End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY2-comp.bin"
-	compressedAY2End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY3-comp.bin"
-	compressedAY3End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY4-comp.bin"
-	compressedAY4End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY5-comp.bin"
-	compressedAY5End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY6-comp.bin"
-	compressedAY6End = *
-	!binary "ChunksWithAppleIIPeriods\\bearagrudge-AY7-comp.bin"
-	compressedAY7End = *
-  } else {
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY0-comp.bin"
-	compressedAY0End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY1-comp.bin"
-	compressedAY1End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY2-comp.bin"
-	compressedAY2End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY3-comp.bin"
-	compressedAY3End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY4-comp.bin"
-	compressedAY4End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY5-comp.bin"
-	compressedAY5End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY6-comp.bin"
-	compressedAY6End = *
-	!binary "ChunksWithSpectrum128Periods\\bearagrudge-AY7-comp.bin"
-	compressedAY7End = *
-  }
+	; todo
 }
 
 ;--------------------------------------
 
-; 5, 6 or 8 chunks of $1C00 or $2000 bytes (except last one)
-; Defaulting to alternate $2000 / $4000 decompression buffers
+; 5 chunks of $2000 bytes (except last one)
+; Defaulting to $0000 dst addr for decompression - so needs fixing up
 ;
 ; An even number of chunks is ok to just loop
 ; - if odd number, then playback of last & decrunch of first will overlap!
-; - so would need to decompress to a non-default address (ie. overwrite last 2 bytes of compressed stream with new destination)
-
-!if USE_ODD_NUMBER_OF_COMPRESSED_CHUNKS {
+; - so need to decompress to a non-default address (ie. overwrite last 2 bytes of compressed stream with new destination)
 
 COMPRESSED_CHUNK_END_ADJUST = 1	; point at endAddr_h to decrunch to (NB. decrunch startAddr is always $0000)
 
@@ -879,18 +806,3 @@ AYPattern
 	!word compressedAY3End-COMPRESSED_CHUNK_END_ADJUST
 	!word compressedAY4End-COMPRESSED_CHUNK_END_ADJUST
 	!word $0000								; loop
-} else {
-AYPattern
-	; AYPatternIdx_user (left-hand column), AYPatternIdx_irq (right-hand column)
-	!word compressedAY0End, $2000
-	!word compressedAY1End, $4000
-	!word compressedAY2End, $2000
-	!word compressedAY3End, $4000
-	!word compressedAY4End, $2000
-	!word compressedAY5End, $4000
-  !if USE_PACKED_8_BYTE_AY_SETS = 0 {
-	!word compressedAY6End, $2000
-	!word compressedAY7End, $4000
-  }
-	!word $0000, $0000						; loop
-}
