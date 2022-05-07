@@ -784,7 +784,16 @@ AYDataCompressed
 	!binary "ChunksWithAppleIIPeriods-Packed\\bearagrudge-AY4-comp.bin"
 	compressedAY4End = *
 } else {
-	; todo
+	!binary "ChunksWithSpectrum128Periods-Packed\\bearagrudge-AY0-comp.bin"
+	compressedAY0End = *
+	!binary "ChunksWithSpectrum128Periods-Packed\\bearagrudge-AY1-comp.bin"
+	compressedAY1End = *
+	!binary "ChunksWithSpectrum128Periods-Packed\\bearagrudge-AY2-comp.bin"
+	compressedAY2End = *
+	!binary "ChunksWithSpectrum128Periods-Packed\\bearagrudge-AY3-comp.bin"
+	compressedAY3End = *
+	!binary "ChunksWithSpectrum128Periods-Packed\\bearagrudge-AY4-comp.bin"
+	compressedAY4End = *
 }
 
 ;--------------------------------------
