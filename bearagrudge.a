@@ -342,6 +342,13 @@ loop	lda		State
 			jsr		DecrunchNext
 			lda		#S_NO_WORK
 			sta		State
+
++		lda		isrFlag
+		beq		+
+			lda		#0
+			sta		isrFlag
+			jsr		DisplayMSF
+
 +		lda		BUTTON0
 		and		BUTTON1
 		and		#$80
@@ -552,7 +559,7 @@ Interrupt
 	sta		g_MusicUpdate
 	bne		+
 	jmp		.done
-+
++	sta		isrFlag
 
 	;
 	; Unpack the regs: 8 -> 11 bytes
@@ -965,7 +972,7 @@ LINE1=TEXTLINE2
 LINE2=TEXTLINE3
 LINE3=TEXTLINE4
 LINE4=TEXTLINE5
-LINE5=TEXTLINE6					; "65nnn detected"
+LINE5=TEXTLINE6					; "65nnn detected" & "MM:SS:FF"
 SLOT1POS = $13					; pos left of '1'
 
 Display
@@ -1111,6 +1118,67 @@ DisplayCardUpdate
 }
 
 @done
+	rts
+
+;------------------------------------------------------------------------------
+
+DisplayMSF
+	; 3233343536373839
+	;  M M : S S : F F
+
+	lda		#$80+':'
+	sta		LINE5+34
+	sta		LINE5+37
+
+	ldx		#32
+	lda		nFrameNum+0
+	tay
+	lsr
+	lsr
+	lsr
+	lsr
+	jsr		OutputNibble
+	tya
+	jsr		OutputNibble
+	inx		; skip ':'
+
+	lda		nFrameNum+1
+	tay
+	lsr
+	lsr
+	lsr
+	lsr
+	jsr		OutputNibble
+	tya
+	jsr		OutputNibble
+	inx		; skip ':'
+
+	lda		nFrameNum+2
+	tay
+	lsr
+	lsr
+	lsr
+	lsr
+	jsr		OutputNibble
+	tya
+	; fall through...
+
+OutputNibble
+; Pre: A=nibble to output (high bits can be set)
+;  X=LINE5 offset
+; Post: X++
+
+	and		#$0f
+	cmp		#10
+	bcc		@digit
+	clc
+	adc		#$80+'A'-$0a
+	bne		+
+@digit
+	clc
+	adc		#$80+'0'
++	sta		LINE5,x
+	inx
 	rts
 
 ;------------------------------------------------------------------------------
