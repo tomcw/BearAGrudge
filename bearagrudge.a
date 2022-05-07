@@ -537,20 +537,30 @@ Interrupt
 
 	;
 
-	inc		nFrameNum+2
+	inc		isrFlag			; Signal to main loop to update MSF display
+
+	sed						; BCD mode
+	clc
 	lda		nFrameNum+2
-	cmp		#50
+	adc		#1
+	sta		nFrameNum+2
+	cmp		#$50
 	bne		+
 		lda		#0
 		sta		nFrameNum+2
-		inc		nFrameNum+1
+		clc
 		lda		nFrameNum+1
-		cmp		#60
+		adc		#1
+		sta		nFrameNum+1
+		cmp		#$60
 		bne		+
 			lda		#0
 			sta		nFrameNum+1
-			inc		nFrameNum+0
-+
+			clc
+			lda		nFrameNum+0
+			adc		#1
+			sta		nFrameNum+0
++	cld
 
 	;
 
@@ -559,7 +569,7 @@ Interrupt
 	sta		g_MusicUpdate
 	bne		+
 	jmp		.done
-+	sta		isrFlag
++
 
 	;
 	; Unpack the regs: 8 -> 11 bytes
