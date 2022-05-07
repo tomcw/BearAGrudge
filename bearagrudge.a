@@ -182,7 +182,7 @@ GotMBSlot:
 loop	lda		State
 		beq		+	; S_NO_WORK
 					; else: S_DECRUNCH_NEXT
-			; Decrunch take ~20 frames, and each uncompressed chunk takes 651*2 frames (since BearAGrudge plays back at 25Hz)
+			; Decrunch take ~28 frames, and each uncompressed chunk takes 1023*2 frames to playback (since BearAGrudge plays back at 25Hz)
 			jsr		DecrunchNext
 			lda		#S_NO_WORK
 			sta		State
@@ -368,7 +368,7 @@ DecrunchNext
 	;
 
 	cld
-	jsr		exod_decrunch		; NB. 0x8138C cycles for chunk0
+	jsr		exod_decrunch		; NB. 0x8DEA6 cycles for chunk0
 
 	rts
 
