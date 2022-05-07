@@ -230,6 +230,14 @@ exit
 PlayTune
 ; Pre: MBBaseL,H
 
+	jsr		SaveHV
+	lda		#<msg_tuneTitle
+	ldx		#>msg_tuneTitle
+	jsr		Print
+	jsr		RestoreHV
+
+	;
+
 	lda		MBBaseH
 
 	sta		MB1x+2
@@ -961,11 +969,12 @@ LINE5=TEXTLINE6					; "65nnn detected"
 SLOT1POS = $13					; pos left of '1'
 
 Display
+;(title)
 ;(blank)
 ;               1  2  3  4  5  6  7
 ;          $00: ?     1  S  C  P       ; ?=6522(VIA), 1=Sound-I(or Speech-I), S=Sound/Speech-I, C=MB-C(or MB-A or Sound-II), P=Phasor
 ;          $80:    ?     S  C  P
-;           SP:           VABV B       ; A=SSI263(socket-A), B=SSI263(socket-B), V=Votrax/SC01
+;(blank)
 
 	lda		#$80+'$'
 	sta		LINE2+$0f
@@ -979,11 +988,11 @@ Display
 	lda		#$80+':'
 	sta		LINE2+$12
 	sta		LINE3+$12
-	sta		LINE4+$12
-	lda		#$80+'S'
-	sta		LINE4+$10
-	lda		#$80+'P'
-	sta		LINE4+$11
+;	sta		LINE4+$12
+;	lda		#$80+'S'
+;	sta		LINE4+$10
+;	lda		#$80+'P'
+;	sta		LINE4+$11
 
 	ldx		#7*3-1
 	ldy		#7
@@ -998,14 +1007,14 @@ Display
 		lda		#$80+' '		; C-flag not affected
 		bcc		+
 		lda		#$80+'?'
-+		sta		LINE2+$12,x		; 'V' or ' '
++		sta		LINE2+$12,x		; '?' or ' '
 
 		pla
 		lsr
 		lda		#$80+' '		; C-flag not affected
 		bcc		+
 		lda		#$80+'?'
-+		sta		LINE3+$12,x		; 'V' or ' '
++		sta		LINE3+$12,x		; '?' or ' '
 
 		dex
 		dex
@@ -1079,6 +1088,7 @@ DisplayCardUpdate
 	;
 
 @speech
+!if 0 {
 	lda		hasSC01
 	beq		@SSI263
 		lda		#$80+'V'
@@ -1098,6 +1108,7 @@ DisplayCardUpdate
 			lda		#$80+'B'	; $Cn20
 			sta		LINE4+SLOT1POS,x
 +
+}
 
 @done
 	rts
@@ -1233,8 +1244,11 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Bear A Grudge v0.1, tomch, 2022",$d
+msg_title	!text "Tune test v0.1, Tom Charlesworth, 2022",$d
 msg_titleEnd !text 0
+
+msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
+msg_tuneTitleEnd !text 0
 
 msg_cpu6502Detected !text "6502 detected",$d
 msg_cpu6502DetectedEnd !text 0
