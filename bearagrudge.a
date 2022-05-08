@@ -673,7 +673,7 @@ Interrupt
 		lda		g_UnpackedRegs+AY_NOISEPER
 		and		#AY_NOISE_MASK
 		cmp		#1
-		beq		+
+		beq		++
 			lsr
 			sta		g_UnpackedRegs+AY_NOISEPER
 
