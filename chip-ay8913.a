@@ -213,3 +213,120 @@ SF_ChipReset
 	sta		(MBBase),y
 	iny		; Y = ORA (reg#1)
 	rts
+
+;------------------------------------------------------------------------------
+; Phasor (native mode) routines:
+
+!if 0 {
+AY1_ReadReg
+; Pre: Y = SY6522_ORA for chip A or B
+;	6522.DDRA = $00 (Port-A direction = input)
+; Post: Y = SY6522_ORA for chip A or B
+;	A = data
+	lda		#AY_READ|AY_CS1
+	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	lda		(MBBase),y		; Read Port-A
+	tax
+	lda		#AY_INACTIVE|AY_CS1
+	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	txa
+	rts
+AY2_ReadReg
+	lda		#AY_READ|AY_CS2
+	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	lda		(MBBase),y		; Read Port-A
+	tax
+	lda		#AY_INACTIVE|AY_CS2
+	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	txa
+	rts
+}
+
+AY1_SelectReg
+; Pre: Y = SY6522_ORA for chip A or B
+;	A = reg#
+; Post: Y = SY6522_ORA for chip A or B
+	sta		(MBBase),y
+	lda		#AY_LATCH|AY_CS1
+	bne		+
+AY2_SelectReg
+	sta		(MBBase),y
+	lda		#AY_LATCH|AY_CS2
+	bne		++
+
+AY1_WriteReg
+; Pre: Y = SY6522_ORA for chip A or B
+;	6522.DDRA = $FF (Port-A direction = output)
+;	A = data
+; Post: Y = SY6522_ORA for chip A or B
+	sta		(MBBase),y
+	lda		#AY_WRITE|AY_CS1
+	bne		+
+AY2_WriteReg
+	sta		(MBBase),y
+	lda		#AY_WRITE|AY_CS2
+	bne		++
+
++	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	lda		#AY_INACTIVE|AY_CS1
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	rts
+
+++	dey		; Y = ORB (reg#0)
+	sta		(MBBase),y
+	lda		#AY_INACTIVE|AY_CS2
+	sta		(MBBase),y
+	iny		; Y = ORA (reg#1)
+	rts
+
+;------------------------------------------------------------------------------
+
+AY1_WriteRegValue
+; Pre: Y = SY6522_ORA for chip A or B
+;	A=reg#
+;	X=value
+	jsr		AY1_SelectReg
+	txa
+	jmp		AY1_WriteReg
+
+AY2_WriteRegValue
+; Pre: Y = SY6522_ORA for chip A or B
+;	A=reg#
+;	X=value
+	jsr		AY2_SelectReg
+	txa
+	jmp		AY2_WriteReg
+
+!if 0 {
+AY1_ReadRegValue
+; Pre: Y = SY6522_ORA for chip A or B
+;	X=reg#
+; Post:
+;	A=value
+	jsr		AY_SetPortAOutput
+	txa
+	jsr		AY1_SelectReg
+	jsr		AY_SetPortAInput
+	jmp		AY1_ReadReg
+
+AY2_ReadRegValue
+; Pre: Y = SY6522_ORA for chip A or B
+;	X=reg#
+; Post:
+;	A=value
+	jsr		AY_SetPortAOutput
+	txa
+	jsr		AY2_SelectReg
+	jsr		AY_SetPortAInput
+	jmp		AY2_ReadReg
+}

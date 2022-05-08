@@ -330,8 +330,8 @@ PlayTune
 	sta		nFrameNum+2
 	sta		g_MusicUpdate
 	sta		g_PauseEnabled
-	lda		#3
-	sta		g_AYSelect
+	lda		#%00001111
+	sta		AYMute_user
 
 	cli
 
@@ -369,8 +369,16 @@ loop	lda		State
 +		cmp		#'2'+$80			; toggle 2nd AY
 		bne		+
 			lda		#2
-++			eor		g_AYSelect
-			sta		g_AYSelect
+			bne		++
++		cmp		#'3'+$80			; toggle 3rd AY (Phasor-only)
+		bne		+
+			lda		#4
+			bne		++
++		cmp		#'4'+$80			; toggle 4th AY( Phasor-only)
+		bne		+
+			lda		#8
+++			eor		AYMute_user
+			sta		AYMute_user
 			jmp		loop
 +
 
@@ -641,22 +649,46 @@ Interrupt
 
 	;
 
-	ldx		#AY_INACTIVE
+	ldx		#0			; default: Mockingboard
+	lda		phasorMode
+	cmp		#PH_PHASOR
+	bne		+
+		ldx		#AY_CS1
++	stx		AYChipSelect
+
+	lda		AYMute_user
+	sta		AYMute_irq
 
 	;
-	; AY#0
-	;
 
-	lda		g_AYSelect
-	and		#1
-	beq		muteAY0
+NextAYPair
+		lda		#AY_INACTIVE
+		ora		AYChipSelect
+		tax
 
-	ldy		#0
+		lda		#AY_LATCH
+		ora		AYChipSelect
+		sta		MB7x+1
+		sta		MB7y+1
+
+		lda		#AY_WRITE
+		ora		AYChipSelect
+		sta		MB8x+1
+		sta		MB8y+1
+
+		;
+		; 1st AY in pair
+		;
+
+		lsr		AYMute_irq
+		bcc		muteAY0
+
+		ldy		#0
 .sf_loop0
-MB1x		sty		CARD_BASE+SY6522_ORA
-			lda		#AY_LATCH
-MB2x		sta		CARD_BASE+SY6522_ORB
-MB3x		stx		CARD_BASE+SY6522_ORB	; Set INACTIVE
+MB1x		sty		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORA
+MB7x		lda		#AY_LATCH
+MB2x		sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB
+MB3x		stx		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB	; Set INACTIVE
 			lda		g_UnpackedRegs,y
 !if 1 {		; Noise Period: Convert ZX to MB
 			cpy		#AY_NOISEPER
@@ -667,36 +699,32 @@ MB3x		stx		CARD_BASE+SY6522_ORB	; Set INACTIVE
 			lsr
 +
 }
-MB4x		sta		CARD_BASE+SY6522_ORA
-			lda		#AY_WRITE
-MB5x		sta		CARD_BASE+SY6522_ORB
-MB6x		stx		CARD_BASE+SY6522_ORB	; Set INACTIVE
+MB4x		sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORA
+MB8x		lda		#AY_WRITE
+MB5x		sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB
+MB6x		stx		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB	; Set INACTIVE
 			iny
 			cpy		#AY_EFINE
 			bne		.sf_loop0
-	beq		+
+		beq		+
 
 muteAY0
-	ldy		#SY6522_A_BASE+SY6522_ORA
-	lda		#AY_ENABLE
-	jsr		SF_SelectReg
-	lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
-	jsr		SF_WriteReg
+		ldy		#SY6522_A_PH_BASE+SY6522_ORA
+		jsr		MuteAY
 
 +
 
-	;
-	; AY#1
-	;
+		;
+		; 2nd AY in pair
+		;
 
-	lda		g_AYSelect
-	and		#2
-	beq		muteAY1
+		lsr		AYMute_irq
+		bcc		muteAY1
 
-	ldy		#0
+		ldy		#0
 .sf_loop1
 MB1y		sty		CARD_BASE+SY6522_B_BASE+SY6522_ORA
-			lda		#AY_LATCH
+MB7y		lda		#AY_LATCH
 MB2y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORB
 MB3y		stx		CARD_BASE+SY6522_B_BASE+SY6522_ORB	; Set INACTIVE
 			lda		g_UnpackedRegs,y
@@ -710,22 +738,27 @@ MB3y		stx		CARD_BASE+SY6522_B_BASE+SY6522_ORB	; Set INACTIVE
 +
 }
 MB4y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORA
-			lda		#AY_WRITE
+MB8y		lda		#AY_WRITE
 MB5y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORB
 MB6y		stx		CARD_BASE+SY6522_B_BASE+SY6522_ORB	; Set INACTIVE
 			iny
 			cpy		#AY_EFINE
 			bne		.sf_loop1
 
-	beq		+
+		beq		+
 
 muteAY1
-	ldy		#SY6522_B_BASE+SY6522_ORA
-	lda		#AY_ENABLE
-	jsr		SF_SelectReg
-	lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
-	jsr		SF_WriteReg
+		ldy		#SY6522_B_BASE+SY6522_ORA
+		jsr		MuteAY
 
++
+
+	lda		AYChipSelect
+	lsr
+	and		#AY_CS1|AY_CS2
+	sta		AYChipSelect
+	beq		+
+	jmp		NextAYPair
 +
 
 	;
@@ -763,6 +796,35 @@ MB7	sta		CARD_BASE+SY6522_IFR	; Clear Timer1 IRQ flag
 
 	lda		$45
 	rti
+
+;------------------------------------------------------------------------------
+
+MuteAY:
+; Pre: Y = SY6522_ORA for chip A or B
+
+		lda		AYChipSelect
+		bne		+
+
+			; Mockingboard
+			lda		#AY_ENABLE
+			jsr		SF_SelectReg
+			lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
+			jmp		SF_WriteReg
+
++		and		#AY_CS1
+		beq		+
+
+			; Phasor: AY-CS1
+			lda		#AY_ENABLE
+			jsr		AY1_SelectReg
+			lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
+			jmp		AY1_WriteReg
+
++			; Phasor: AY-CS2
+			lda		#AY_ENABLE
+			jsr		AY2_SelectReg
+			lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
+			jmp		AY2_WriteReg
 
 ;------------------------------------------------------------------------------
 
@@ -1352,7 +1414,9 @@ msg_OKEnd !text 0
 nMBBaseHi		!byte 0
 nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
-g_AYSelect		!byte 3		; bit1=AY#1, bit0=AY#0
+AYMute_user		!byte %00001111		; bit2=AY#3(Phasor-only), bit0=AY#2(Phasor-only), bit1=AY#1, bit0=AY#0
+AYMute_irq		!byte 0
+AYChipSelect	!byte 0
 g_PauseEnabled	!byte 0
 AYPatternIdx	!byte 0
 NextAYChunkAddr_H_user	!byte 0
