@@ -16,7 +16,6 @@
 
 !source "AppleDefs.a"
 !source "MockingboardDefs.a"
-!source "MB-Macros.a"
 
 ;------------------------------------------------------------------------------
 
