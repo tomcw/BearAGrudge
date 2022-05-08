@@ -651,6 +651,36 @@ Interrupt
 
 	;
 
+	lda		phasorMode
+	cmp		#PH_PHASOR
+	bne		+
+
+		; Phasor mode: double the ABC periods
+
+		asl		g_UnpackedRegs+AY_AFINE
+		rol		g_UnpackedRegs+AY_ACOARSE
+
+		asl		g_UnpackedRegs+AY_BFINE
+		rol		g_UnpackedRegs+AY_BCOARSE
+
+		asl		g_UnpackedRegs+AY_CFINE
+		rol		g_UnpackedRegs+AY_CCOARSE
+
+		jmp		++
+
++		; NOT Phasor mode: halve the Noise period (convert ZX to MB)
+
+		lda		g_UnpackedRegs+AY_NOISEPER
+		and		#AY_NOISE_MASK
+		cmp		#1
+		beq		+
+			lsr
+			sta		g_UnpackedRegs+AY_NOISEPER
+
+++
+
+	;
+
 	ldx		#0			; default: Mockingboard
 	lda		phasorMode
 	cmp		#PH_PHASOR
@@ -692,15 +722,6 @@ MB7x		lda		#AY_LATCH
 MB2x		sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB
 MB3x		stx		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB	; Set INACTIVE
 			lda		g_UnpackedRegs,y
-!if 1 {		; Noise Period: Convert ZX to MB
-			cpy		#AY_NOISEPER
-			bne		+
-			and		#AY_NOISE_MASK
-			cmp		#1
-			beq		+
-			lsr
-+
-}
 MB4x		sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORA
 MB8x		lda		#AY_WRITE
 MB5x		sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_ORB
@@ -730,15 +751,6 @@ MB7y		lda		#AY_LATCH
 MB2y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORB
 MB3y		stx		CARD_BASE+SY6522_B_BASE+SY6522_ORB	; Set INACTIVE
 			lda		g_UnpackedRegs,y
-!if 1 {		; Noise Period: Convert ZX to MB
-			cpy		#AY_NOISEPER
-			bne		+
-			and		#AY_NOISE_MASK
-			cmp		#1
-			beq		+
-			lsr
-+
-}
 MB4y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORA
 MB8y		lda		#AY_WRITE
 MB5y		sta		CARD_BASE+SY6522_B_BASE+SY6522_ORB
