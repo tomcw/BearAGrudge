@@ -258,23 +258,20 @@ PlayTune
 
 	;
 
-	lda		#$07
-	ldy		#SY6522_DDRB
-	sta		(MBBase),y
-	ldy		#SY6522_DDRB+SY6522_B_BASE
-	sta		(MBBase),y
+	; TODO: make this user-selectable, and default to MB mode
+	lda		isPhasorCard
+	beq		+
+		lda		#PH_PHASOR
+		jsr		SetPhasorMode
++
 
-	lda		#$ff
-	ldy		#SY6522_DDRA
-	sta		(MBBase),y
-	ldy		#SY6522_DDRA+SY6522_B_BASE
-	sta		(MBBase),y
+	lda		#SY6522_A_PH_BASE
+	sta		zpTmp3
+	jsr		Init6522ForAY
 
-	lda		#AY_RESET
-	ldy		#SY6522_ORB
-	sta		(MBBase),y
-	ldy		#SY6522_ORB+SY6522_B_BASE
-	sta		(MBBase),y
+	lda		#SY6522_B_BASE
+	sta		zpTmp3
+	jsr		Init6522ForAY
 
 	;
 
@@ -304,18 +301,18 @@ PlayTune
 	sei
 
 	lda		#$e7
-	ldy		#SY6522_TIMER1L_COUNTER
+	ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
 	sta		(MBBase),y
 	lda		#$4f
-	ldy		#SY6522_TIMER1H_COUNTER
+	ldy		#SY6522_TIMER1H_COUNTER+SY6522_A_PH_BASE
 	sta		(MBBase),y
 
 	lda		#ACR_FREERUNNING
-	ldy		#SY6522_ACR
+	ldy		#SY6522_ACR+SY6522_A_PH_BASE
 	sta		(MBBase),y				; Free running timer
 
 	lda		#IER_SET|IxR_TIMER1
-	ldy		#SY6522_IER	
+	ldy		#SY6522_IER+SY6522_A_PH_BASE
 	sta		(MBBase),y				; Enable Timer1 IRQ
 
 	lda		#<Interrupt
@@ -388,7 +385,7 @@ pause	; step via one-shot mode
 
 		sei
 		lda		#ACR_ONESHOT
-		ldy		#SY6522_ACR
+		ldy		#SY6522_ACR+SY6522_A_PH_BASE
 		sta		(MBBase),y
 		lda		nFrameNum+2
 		cli
@@ -404,10 +401,10 @@ pause	; step via one-shot mode
 		tax		; keycode
 
 		lda		#$e7
-		ldy		#SY6522_TIMER1L_COUNTER
+		ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
 		sta		(MBBase),y
 		lda		#$4f
-		ldy		#SY6522_TIMER1H_COUNTER
+		ldy		#SY6522_TIMER1H_COUNTER+SY6522_A_PH_BASE
 		sta		(MBBase),y
 
 		cpx		#' '+$80
@@ -415,7 +412,7 @@ pause	; step via one-shot mode
 
 		; restart
 		lda		#ACR_FREERUNNING
-		ldy		#SY6522_ACR
+		ldy		#SY6522_ACR+SY6522_A_PH_BASE
 		sta		(MBBase),y				; Free running timer
 		jmp		loop
 
@@ -424,25 +421,30 @@ pause	; step via one-shot mode
 done
 
 	sei
-		lda		#AY_RESET
-		ldy		#SY6522_ORB
-		sta		(MBBase),y
-		ldy		#SY6522_ORB+SY6522_B_BASE
-		sta		(MBBase),y
+		ldy		#SY6522_A_PH_BASE
+		jsr		SF_ChipReset
+		ldy		#SY6522_B_BASE
+		jsr		SF_ChipReset
 
 		lda		#ACR_ONESHOT
-		ldy		#SY6522_ACR
+		ldy		#SY6522_ACR+SY6522_A_PH_BASE
 		sta		(MBBase),y
 
-		ldy		#SY6522_IFR
+		ldy		#SY6522_IFR+SY6522_A_PH_BASE
 -			lda		(MBBase),y
 			and		#IxR_TIMER1
 			beq		-
 
 		lda		#IER_CLR|IxR_TIMER1
-		ldy		#SY6522_IER
+		ldy		#SY6522_IER+SY6522_A_PH_BASE
 		sta		(MBBase),y				; Disable Timer1 IRQ
 	cli
+
+	lda		isPhasorCard
+	beq		+
+		lda		#PH_MOCKINGBOARD
+		jsr		SetPhasorMode
++
 
 	rts
 
@@ -787,7 +789,7 @@ muteAY1
 
 .done
 	lda		#IER_CLR|IxR_TIMER1
-MB7	sta		CARD_BASE+SY6522_IFR	; Clear Timer1 IRQ flag
+MB7	sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_IFR	; Clear Timer1 IRQ flag
 
 	pla
 	tay
