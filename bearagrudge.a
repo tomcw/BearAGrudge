@@ -233,6 +233,14 @@ PlayTune
 	lda		#<msg_tuneTitle
 	ldx		#>msg_tuneTitle
 	jsr		Print
+
+	lda		#<msg_instructionsMB
+	ldx		#>msg_instructionsMB
+	ldy		isPhasorCard
+	beq		+
+		lda		#<msg_instructionsPH
+		ldx		#>msg_instructionsPH
++	jsr		Print
 	jsr		RestoreHV
 
 	;
@@ -1402,6 +1410,12 @@ msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
 msg_tuneTitleEnd !text 0
+
+;                         0123456789012345678901234567890123456789
+msg_instructionsMB !text "Press 1-2 to toggle tune on 2x AY chips",$d
+msg_instructionsMBEnd !text 0
+msg_instructionsPH !text "Press 1-4 to toggle tune on 4x AY chips",$d
+msg_instructionsPHEnd !text 0
 
 msg_cpu6502Detected !text "6502 detected",$d
 msg_cpu6502DetectedEnd !text 0
