@@ -176,8 +176,6 @@ INIT:
 
 	;
 
-	lda		#$80+$0d
-	jsr		COUT
 	lda		#<msg_OK
 	ldx		#>msg_OK
 	jsr		Print
@@ -241,6 +239,10 @@ PlayTune
 		lda		#<msg_instructionsPH
 		ldx		#>msg_instructionsPH
 +	jsr		Print
+
+	lda		#<msg_instructionsEsc
+	ldx		#>msg_instructionsEsc
+	jsr		Print
 	jsr		RestoreHV
 
 	;
@@ -1416,6 +1418,8 @@ msg_instructionsMB !text "Press 1-2 to toggle tune on 2x AY chips",$d
 msg_instructionsMBEnd !text 0
 msg_instructionsPH !text "Press 1-4 to toggle tune on 4x AY chips",$d
 msg_instructionsPHEnd !text 0
+msg_instructionsEsc !text "ESC to quit",$d
+msg_instructionsEscEnd !text 0
 
 msg_cpu6502Detected !text "6502 detected",$d
 msg_cpu6502DetectedEnd !text 0
@@ -1433,7 +1437,7 @@ msg_SlotEnd !text 0
 msg_TestFailed !text "Mockingboard failed test: 6522 "
 msg_TestFailedEnd !text 0
 
-msg_OK !text "Done",$d
+msg_OK !text $d,$d,$d,"Done",$d
 msg_OKEnd !text 0
 
 ;
