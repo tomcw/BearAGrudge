@@ -777,7 +777,7 @@ muteAY1
 +
 
 	lda		AYChipSelect
-	lsr
+	asl
 	and		#AY_CS1|AY_CS2
 	sta		AYChipSelect
 	beq		+
