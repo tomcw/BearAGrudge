@@ -1,5 +1,5 @@
 ;license:MIT
-;(c) 2022 by Tom Charlesworth
+;(c) 2023 by Tom Charlesworth
 ;
 ; Bear A Grudge:
 ; . Playback tune on 2 (or 4) AY-3-8913's
@@ -305,11 +305,12 @@ PlayTune
 	;
 
 	; Setup Timer1 IRQ to trigger at 50Hz
-	; Apple CLK = 1.022727 MHz, so set Timer1=0x4fe7
+	; . Apple II NTSC cycles/frame = 262*65*60 => 1.021800 MHz, so set Timer1=0x4fd2 for 50Hz (-2 for 6522)
+	; . Apple II  PAL cycles/frame = 312*65*50 => 1.014000 MHz, so set Timer1=0x4f36 for 50Hz (-2 for 6522)
 
 	sei
 
-	lda		#$e7
+	lda		#$d2
 	ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
 	sta		(MBBase),y
 	lda		#$4f
@@ -1407,7 +1408,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v0.1, Tom Charlesworth, 2022",$d
+msg_title	!text "Tune test v1.0, Tom Charlesworth, 2023",$d
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
