@@ -45,6 +45,14 @@ zpTmpH	= zpTmp+1
 
 ;------------------------------------------------------------------------------
 
+; Setup Timer1 IRQ to trigger at 50Hz
+; . Apple II NTSC cycles/frame = 262*65*60 => 1.021800 MHz, so set Timer1=0x4fd2 for 50Hz (-2 for 6522)
+; . Apple II  PAL cycles/frame = 312*65*50 => 1.014000 MHz, so set Timer1=0x4f36 for 50Hz (-2 for 6522)
+
+TIMER_INTERVAL = $4fd2
+
+;------------------------------------------------------------------------------
+
 !zone code
 
 INIT:
@@ -117,6 +125,14 @@ INIT:
 		sta		hasLowerCase
 +
 
+	jsr		isIIc
+	bne		+
+		; //c only: Enable MB4c (and disable mouse firmware). (mb-audit/GH#8)
+		lda		#$ff
+		sta		$C403		; SY6522_DDRA
+		sta		$C404		; SY6522_TIMER1L_COUNTER - just writes to T1_LATCH(low)
++
+
 	lda		TEXTON
 	lda		MIXEDOFF
 	lda		PAGE2OFF
@@ -153,6 +169,9 @@ INIT:
 	lda		#0
 	sta		totalTests+0
 	sta		totalTests+1
+	sta		totalTests+2
+;	sta		warningCount
+	sta		numMegaAudioCards
 
 	lda		#7
 	sta		slotUnderTest
@@ -161,6 +180,8 @@ INIT:
 		lda		slotInfo,x
 		beq		+
 			sta		has6522
+			jsr		DisplaySlotUpdate
+			ldx		slotUnderTest
 			jsr		Check6522		; Basic 6522 checks
 			bcc		++
 				jsr		PrintTestFailed
@@ -305,15 +326,13 @@ PlayTune
 	;
 
 	; Setup Timer1 IRQ to trigger at 50Hz
-	; . Apple II NTSC cycles/frame = 262*65*60 => 1.021800 MHz, so set Timer1=0x4fd2 for 50Hz (-2 for 6522)
-	; . Apple II  PAL cycles/frame = 312*65*50 => 1.014000 MHz, so set Timer1=0x4f36 for 50Hz (-2 for 6522)
 
 	sei
 
-	lda		#$d2
+	lda		#<TIMER_INTERVAL
 	ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
 	sta		(MBBase),y
-	lda		#$4f
+	lda		#>TIMER_INTERVAL
 	ldy		#SY6522_TIMER1H_COUNTER+SY6522_A_PH_BASE
 	sta		(MBBase),y
 
@@ -410,10 +429,10 @@ pause	; step via one-shot mode
 		bit		KBDSTRB
 		tax		; keycode
 
-		lda		#$e7
+		lda		#<TIMER_INTERVAL
 		ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
 		sta		(MBBase),y
-		lda		#$4f
+		lda		#>TIMER_INTERVAL
 		ldy		#SY6522_TIMER1H_COUNTER+SY6522_A_PH_BASE
 		sta		(MBBase),y
 
@@ -896,11 +915,27 @@ GetSlotInfo
 
 ;------------------------------------------------------------------------------
 
+SetMBBase
+; Pre: X=slot#
+; Post: X=slot#
+
+	txa
+	ora		#$c0
+	sta		MBBaseH
+	lda		#0
+	sta		MBBaseL
+	rts
+
+;------------------------------------------------------------------------------
+
 DetectSubunits
 ; Detect Phasor card & AY8913
 ; Pre: zpTmp1 = slotInfo[slot]
 
 	lda		#0
+	sta		isMegaAudioCard
+	sta		isMB4C
+	sta		isEchoPlus
 	sta		isPhasorCard			; assume Mockingboard
 	sta		hasSSI263				; ... no SSI263's
 	sta		hasSC01					; ... no SC01
@@ -914,7 +949,32 @@ DetectSubunits
 	lda		zpTmp1
 	and		#HAS_6522B|HAS_6522A
 	cmp		#HAS_6522B|HAS_6522A
-	bne		@donePhasor
+	bne		@doneCardDetection
+
+	; Determine if this is a MegaAudio
+
+	jsr		DetectMegaAudioCard		; Post: Z=1 if no MegaAudio
+	beq		+
+		inc		numMegaAudioCards
+		bne		@doneCardDetection
++
+
+	; Determine if this is a MB4C or Echo+ card
+	; NB. if Phasor(Echo+ mode), then don't do the Phasor check - want to preserve the Echo+ mode for user
+
+	jsr		DetectMB4CorEchoPlus	; Post: Z=1 if no MB4C/EchoPlus
+	beq		+
+		; Indicate there's only a 6522 at $Cn80, otherwise some 6522 tests will fail
+		; NB. For Phasor(Echo+ mode), CTRL+RESET will switch back to MB mode, so need to use 6522-B
+		ldx		slotUnderTest
+		lda		#HAS_6522B
+		sta		slotInfo,x
+		sta		has6522
+		sta		zpTmp1
+		bne		@doneCardDetection
++
+
+	; Determine if this is a Mockingboard or Phasor card
 
 	lda		#$55
 	ldy		#SY6522_DDRB
@@ -942,7 +1002,7 @@ DetectSubunits
 ++	lda		#PH_MOCKINGBOARD
 	jsr		SetPhasorMode
 
-@donePhasor
+@doneCardDetection
 
 	;
 
@@ -1056,6 +1116,19 @@ incTotalTests
 
 ;------------------------------------------------------------------------------
 
+isIIc
+; Post: Z=1 if //c
+
+	lda		VERSION
+	cmp		#VERSION_IIE_OR_HIGHER
+	bne		+
+
+	lda		VERSION3
+	cmp		VERSION3_IIC
++	rts
+
+;------------------------------------------------------------------------------
+
 TEXTLINE0=$400
 TEXTLINE1=$480
 TEXTLINE2=$500
@@ -1075,7 +1148,7 @@ Display
 ;(title)
 ;(blank)
 ;               1  2  3  4  5  6  7
-;          $00: ?     1  S  C  P       ; ?=6522(VIA), 1=Sound-I(or Speech-I), S=Sound/Speech-I, C=MB-C(or MB-A or Sound-II), P=Phasor
+;          $00: ?     1  S  C  P       ; ?=6522(VIA), 1=Sound-I(or Speech-I), S=Sound/Speech-I, M=MegaAudio, M4C=MB4C, E=Echo+, C=MB-C(or MB-A or Sound-II), P=Phasor
 ;          $80:    ?     S  C  P
 ;(blank)
 
@@ -1140,6 +1213,30 @@ Display
 
 ;--------------------------------------
 
+DisplaySlotUpdate
+
+	ldx		#7*3-1
+	ldy		#7
+
+-		tya
+		cmp		slotUnderTest
+		bne		+
+			ora		#'0'
+			bne		++
+			;
++			ora		#$80+'0'
+++		sta		LINE1+$12,x		; '1  2  3  4  5  6  7'
+
+		dex
+		dex
+		dex
+		dey
+		bne		-
+
+	rts
+
+;--------------------------------------
+
 DisplayCardUpdate
 ; Pre: X=slot#
 
@@ -1156,35 +1253,67 @@ DisplayCardUpdate
 	adc		zpTmp1
 	tax
 
+	lda		isPhasorCard
+	beq		@mb
+
+		; ...
+
++		lda		#$80+' '
+		sta		zpTmp1			; x-1 pos: default: ' '
+		sta		zpTmp2			; x+1 pos: default: ' '
+		lda		#$80+'P'
+		bne		@out
+
+	;
+
+@mb	; ...
+
++	lda		#$80+' '
+	sta		zpTmp1			; x-1 pos: default: ' '
+	sta		zpTmp2			; x+1 pos: default: ' '
+
 	lda		has6522
-	cmp		#1					; only a 6522 at $00?
+	cmp		#%00000001			; only a 6522 at $00?
 	bne		+
 		lda		#$80+'1'		; MB-Sound I (has a 6522/AY8913 at $00) or MB-Speech I (has a 6522/SC01) at $00
 		sta		LINE2+SLOT1POS,x
 
 +	lda		has6522
-	cmp		#2					; only a 6522 at $80?
+	cmp		#%00000010			; only a 6522 at $80?
 	bne		+
 		lda		#$80+'?'		; don't know what this is!
 		sta		LINE3+SLOT1POS,x
 
 +	lda		has6522
-	cmp		#3					; 6522 at $00 && $80?
+	cmp		#%00000011			; 6522 at $00 && $80?
 	bcc		@speech				; (branch if A < 3)
-		lda		hasSSI263
-		bne		+
-		lda		hasSC01
+		lda		isMegaAudioCard
 		beq		+
-			lda		#$80+'S'	; MB-Sound/Speech I has a 6522/SC01 at $00; and a 6522/AY8913 at $80
+			lda		#$80+'M'
 			bne		@out
-+		lda		isPhasorCard
-		beq		@isIIorC
-			lda		#$80+'P'
++		lda		isMB4C
+		beq		+
+			lda		#$80+'M'	; 'M4C'
+			sta		zpTmp1
+			lda		#$80+'C'
+			sta		zpTmp2
+			lda		#$80+'4'
 			bne		@out
-@isIIorC	lda		#$80+'C'	; MB-C or MB-Sound II (has 2x 6522/AY8913, but no SC01 nor SSI263)
-@out:
-		sta		LINE2+SLOT1POS,x
++		lda		isEchoPlus
+		beq		+
+			lda		#$80+'E'
+			bne		@out
++			lda		#$80+'C'	; MB-C or MB-Sound II (has 2x 6522/AY8913, but no SC01 nor SSI263)
+			bne		@out
+
+@out	sta		LINE2+SLOT1POS,x
 		sta		LINE3+SLOT1POS,x
+		lda		zpTmp1
+		sta		LINE2+SLOT1POS-1,x
+		sta		LINE3+SLOT1POS-1,x
+		lda		zpTmp2
+		sta		LINE2+SLOT1POS+1,x
+		sta		LINE3+SLOT1POS+1,x
 
 	;
 	; Add info about any speech chips
@@ -1362,6 +1491,8 @@ HAS_6522A		= %00000001	;   b0:    6522 at $00
 slotInfo		!fill 8,0	; slot[0..7]
 
 numMockingboards	!byte 0
+;numMockingboardsForMCT	!byte 0		; num of Mockingboards for multi-card tests: need 2x 6522 per card
+numMegaAudioCards		!byte 0
 
 is65C02			!byte 0
 is65816			!byte 0
@@ -1372,8 +1503,11 @@ slotUnderTest	!byte 0
 testComponentNum	!byte COMPONENT_CARD
 testNum			!byte 0
 subTestNum		!byte 0
-totalTests		!byte 0,0
+totalTests		!byte 0,0,0
 
+isMegaAudioCard	!byte 0
+isMB4C			!byte 0
+isEchoPlus		!byte 0
 isPhasorCard	!byte 0
 phasorMode		!byte PH_MOCKINGBOARD
 

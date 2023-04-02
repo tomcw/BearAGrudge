@@ -10,27 +10,46 @@ Detect6522
 ; Pre: X=slot#
 ; Post: X=slot#
 
-	txa
-	ora		#$c0
-	sta		MBBaseH
-	lda		#0
-	sta		MBBaseL
+	jsr		SetMBBase
 
 	; 6522's IER.b7 is always 1
 	; . Due to floating bus (and the visible TEXT screen being mainly $A0 values), then empty slots will likely pass this IER.b7 check
 	ldy		#SY6522_A_BASE+SY6522_IER
 	lda		(MBBase),y
-	bmi		@check_A
+	bmi		@checkT2_A
+
+	;
+	; Could still be MegaAudio, so use TIMER1 (IER.b7 reads as 0, and TIMER2 isn't supported!)
+	;
+
+	ldy		#SY6522_A_BASE+SY6522_TIMER1L_COUNTER
+	jsr		@Check6522
+	bne		+
+		inc		slotInfo,x	; bit0=1
++
+
+@checkT1_B
+	ldy		#SY6522_B_BASE+SY6522_TIMER1L_COUNTER
+	jsr		@Check6522
+	bne		+
+		inc		slotInfo,x
+		inc		slotInfo,x	; bit1=1
++
+
 	rts
 
-@check_A
+	;
+	; For a regular Mockingboard, use TIMER2
+	;
+
+@checkT2_A
 	ldy		#SY6522_A_BASE+SY6522_TIMER2L_COUNTER
 	jsr		@Check6522
 	bne		+
 		inc		slotInfo,x	; bit0=1
 +
 
-@check_B
+@checkT2_B
 	ldy		#SY6522_B_BASE+SY6522_TIMER2L_COUNTER
 	jsr		@Check6522
 	bne		+
@@ -43,12 +62,12 @@ Detect6522
 	;
 
 @Check6522
-; Pre: Y = SY6522_TIMER2L_COUNTER for chip A or B
-; 	NB. Checking with T2 is more robust than with T1, as there's no latch
+; Pre: Y = SY6522_TIMER1L_COUNTER or SY6522_TIMER2L_COUNTER for chip A or B
+; 	NB. Checking with T2 is more robust than with T1, as there's no latch for T2
 ; Post: Z=1(OK), Z=0(NG)
 	lda		#4				; try 4 checks (avoid floating bus giving a false-positive)
 	sta		zpTmp1
-	lda		#1				; failures (can have 1 failure)
+	lda		#1				; failures (can have 1 failure - eg. for that flaky card that works most of the time)
 	sta		zpTmp2
 -		jsr		SF_GetTimerL
 		beq		+
@@ -60,8 +79,8 @@ Detect6522
 
 	;
 
-SF_GetTimerL				; Based on Skyfox's detection code (but uses T2 instead of T1)
-; Pre: Y = SY6522_TIMER2L_COUNTER for chip A or B
+SF_GetTimerL				; Based on Skyfox's detection code
+; Pre: Y = SY6522_TIMER1L_COUNTER or SY6522_TIMER2L_COUNTER for chip A or B
 ;	MBBaseL=$00 (whether checking chip A or B)
 ; Post: Z=1(OK), Z=0(NG)
 	lda		(MBBase),y
@@ -74,15 +93,131 @@ SF_GetTimerL				; Based on Skyfox's detection code (but uses T2 instead of T1)
 
 ;------------------------------------------------------------------------------
 
+DetectMegaAudioCard
+; Pre: zpTmp1 = slotInfo[slot]
+; Post: isMegaAudioCard
+;	Z=1:  no MegaAudio
+
+	lda		#0
+	sta		isMegaAudioCard
+
+	lda		zpTmp1
+	and		#HAS_6522B|HAS_6522A
+	cmp		#HAS_6522B|HAS_6522A
+	bne		@done
+
+	sei
+	lda		#<Check6522ISR
+	ldx		#>Check6522ISR
+	jsr		SetIrqNmiVectors
+
+	lda		#0
+	sta		isrCopyA
+	sta		isrIFR_A
+
+	jsr		WaitT1OneShotUnderflow		; T1C=$0101 (minus a few cycles)
+
+	lda		#ACR_ONESHOT
+	ldy		#SY6522_ACR
+	sta		(MBBase),y
+
+	lda		#IER_SET|IxR_TIMER1
+	ldy		#SY6522_IER
+	sta		(MBBase),y
+
+	lda		#$06
+	ldy		#SY6522_TIMER1L_COUNTER
+	sta		(MBBase),y
+	lda		#$00
+	ldy		#SY6522_TIMER1H_COUNTER
+	sta		(MBBase),y					; (and clears IFR.T1)
+
+										;   T1C
+										; $0006
+	lda		#2					; 2cy	; $0004
+	ldx		#1					; 2cy	; $0002
+	cli							; 2cy	; $0000
+	sta		zpTmp2				; 3cy	; $ffff
+										; $0002	: real 6522 - IRQ occurs on 2nd cycle... so IRQ occurs after this 'sta zp'
+										; $0001	: FPGA 6522 - IRQ occurs on 3rd cycle... so IRQ deferred until after next 'stx zp'
+	stx		zpTmp2
+
+	lda		isrCopyA
+	and		#1
+	sta		isMegaAudioCard
+
+@done
+	rts
+
+;------------------------------------------------------------------------------
+
+DetectMB4CorEchoPlus
+; Pre:
+; Post: isMB4C, isEchoPlus
+;	Z=1:  no MB4C/EchoPlus
+
+	; MB4C/Echo+ only has 1x 6522, but mapped to both $00 and $80
+	; . MB4C: assume it'll use the 6522's b7 addr to determine which AY8913 to write to
+	; . Echo+ uses 6522's PORTB (bits 4 & 3) to chip-select each AY8913
+
+	ldy		#SY6522_A_BASE+SY6522_DDRB
+	lda		#$FF
+	sta		(MBBase),y
+	iny									; Y=SY6522_DDRA
+	sta		(MBBase),y
+
+	ldy		#SY6522_B_BASE+SY6522_DDRB
+	lda		#$69
+	sta		(MBBase),y
+	lda		#$96
+	iny									; Y=SY6522_DDRA
+	sta		(MBBase),y
+
+	ldy		#SY6522_A_BASE+SY6522_DDRB
+@loop	lda		#$69
+		cmp		(MBBase),y
+		bne		@notDetected
+		lda		#$96
+		iny								; Y=SY6522_DDRA
+		cmp		(MBBase),y
+		bne		@notDetected
+
+		cpy		#SY6522_B_BASE+SY6522_DDRA
+		beq		+
+		ldy		#SY6522_B_BASE+SY6522_DDRB
+		bne		@loop
+
++	; MB4C is only in a //c, and Echo+ is never in a //c
+	jsr		isIIc
+	bne		@EchoPlus
+
+;@MB4C
+		lda		#1
+		ldx		#0
+		beq		@done
+
+@EchoPlus
+		lda		#0
+		ldx		#1
+		bne		@done
+
+@notDetected
+	lda		#0
+	tax
+
+@done
+	sta		isMB4C
+	stx		isEchoPlus
+	ora		isEchoPlus					; set Z
+	rts
+
+;------------------------------------------------------------------------------
+
 Check6522
 ; Pre: X=slot#
 ; Post: C=0(OK), C=1(NG)
 
-	txa
-	ora		#$c0
-	sta		MBBaseH
-	lda		#0
-	sta		MBBaseL
+	jsr		SetMBBase
 
 	lda		slotInfo,x
 	and		#3							; just 6522's
@@ -403,6 +538,11 @@ WaitT2OneShotUnderflow
 	rts
 
 WaitT2Underflow
+	lda		isMegaAudioCard
+	beq		+
+		rts							; Assume Mega Audio doesn't support Timer2!
++
+
 	ldy		#SY6522_TIMER2H_COUNTER
 -		lda		(MBBase),y			; wait $00nn
 		bne		-
