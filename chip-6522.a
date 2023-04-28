@@ -151,14 +151,20 @@ DetectMegaAudioCard
 
 ;------------------------------------------------------------------------------
 
-DetectMB4CorEchoPlus
+DetectMB4CorEchoPlusorSDM
 ; Pre:
-; Post: isMB4C, isEchoPlus
-;	Z=1:  no MB4C/EchoPlus
+; Post: isMB4C, isEchoPlus, isSDMusic
+;	Z=1:  no MB4C/EchoPlus/SD Music
 
 	; MB4C/Echo+ only has 1x 6522, but mapped to both $00 and $80
 	; . MB4C: assume it'll use the 6522's b7 addr to determine which AY8913 to write to
 	; . Echo+ uses 6522's PORTB (bits 4 & 3) to chip-select each AY8913
+	; . SD Music / SD Music Deluxe: like MB4C for selecting AY8913
+
+	lda		#0
+	sta		isMB4C
+	sta		isEchoPlus
+	sta		isSDMusic
 
 	ldy		#SY6522_A_BASE+SY6522_DDRB
 	lda		#$FF
@@ -189,26 +195,22 @@ DetectMB4CorEchoPlus
 
 +	; MB4C is only in a //c, and Echo+ is never in a //c
 	jsr		isIIc
-	bne		@EchoPlus
+	bne		@EchoPlusOrSDMusic
 
 ;@MB4C
 		lda		#1
-		ldx		#0
-		beq		@done
+		sta		isMB4C
+		rts
 
-@EchoPlus
-		lda		#0
-		ldx		#1
-		bne		@done
+@EchoPlusOrSDMusic
+		jsr		IsEchoPlus				; post: isEchoPlus
+		lda		#1						; Z=0: detected something
+		bcc		+						; C=0 => Echo+ detected
+		sta		isSDMusic
++		rts
 
 @notDetected
 	lda		#0
-	tax
-
-@done
-	sta		isMB4C
-	stx		isEchoPlus
-	ora		isEchoPlus					; set Z
 	rts
 
 ;------------------------------------------------------------------------------
@@ -223,8 +225,12 @@ Check6522
 	and		#3							; just 6522's
 	sta		zpTmp1
 
+	; Temporarily set isMegaAudioCard for Check6522Addrlines()
+	jsr		DetectMegaAudioCard			; Pre: zpTmp1; Post: isMegaAudioCard
+
 	lda		#COMPONENT_6522+0			; test component $10
 	sta		testComponentNum
+
 	lda		#0
 	sta		testNum						; test #00
 	sta		subTestNum					; (not used for these tests, so just set to $00)
@@ -240,6 +246,13 @@ Check6522
 Check6522Datalines
 ; Pre: zpTmp1 = slotInfo[slot]
 ; Post: C=0(OK), C=1(NG)
+
+	; Just return OK if same 6522 is mapped to both $00 and $80
+	jsr		DetectMB4CorEchoPlusorSDM
+	beq		+
+		clc
+		rts
++
 
 	;
 	; Check r/w of all 8 data lines
@@ -459,15 +472,24 @@ Check6522ISR
 
 	;------
 
+	; Cope with the case where a single 6522 is mapped to both $00 and $80
+	; . read IFR from both A & B, *before* clearing IFR
+	; . otherwise reading & clear A first, means that B (read second) will always reads as 0.
+	; NB. Needed for Check6522IRQ, eg. for EchoPlus
+
 	ldy		#SY6522_A_BASE+SY6522_IFR
 	lda		(MBBase),y
-	sta		(MBBase),y
 	sta		isrIFR_A
 
 	ldy		#SY6522_B_BASE+SY6522_IFR
 	lda		(MBBase),y
-	sta		(MBBase),y
 	sta		isrIFR_B
+
+	sta		(MBBase),y					; clear 6522_B's IFR
+
+	ldy		#SY6522_A_BASE+SY6522_IFR
+	lda		isrIFR_A
+	sta		(MBBase),y					; clear 6522_A's IFR
 
 	;------
 

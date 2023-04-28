@@ -6,12 +6,53 @@
 
 ;------------------------------------------------------------------------------
 
+IsEchoPlus
+; Pre: Detected a single, but dual-mapped 6522 at $00 and $80; not //c
+; Post: isEchoPlus, C=0(Echo+), C=1(Not Echo+)
+; Trashes: zpTmp5
+
+	lda		#SY6522_A_BASE
+	sta		zpTmp3
+	lda		#1
+	sta		isEchoPlus
+	jsr		Init6522ForAY			; pre: zpTmp3, isEchoPlus=1
+
+	ldx		#AY_ECHO_CS1|AY_LATCH
+	lda		#AY_AFINE
+	ldy		#$11
+	jsr		AY_Echo_WriteRegValue	; post: trashes zpTmp5
+
+	ldx		#AY_ECHO_CS2|AY_LATCH
+	lda		#AY_AFINE
+	ldy		#$33
+	jsr		AY_Echo_WriteRegValue	; post: trashes zpTmp5
+
+	ldx		#AY_ECHO_CS1|AY_LATCH
+	ldy		#AY_AFINE
+	jsr		AY_Echo_ReadRegValue
+	cmp		#$11
+	bne		+
+
+	ldx		#AY_ECHO_CS2|AY_LATCH
+	ldy		#AY_AFINE
+	jsr		AY_Echo_ReadRegValue
+	cmp		#$33
+	clc
+	beq		++
+
++	lda		#0
+	sta		isEchoPlus
+	sec
+++	rts
+
+;------------------------------------------------------------------------------
+
 DetectAY8913
 ; Pre: zpTmp1 = 6522 bitmap in b1:0
 ;	hasAY8913 = 0
-;	isPhasorCard
+;	isPhasorCard, isMegaAudioCard, isMB4C, isEchoPlus, isSDMusic
 ; Post:
-;	hasAY8913 = %0000,%0001,%0010,%0011 - for Mockingboard
+;	hasAY8913 = %0000,%0001,%0010,%0011 - for Mockingboard or Echo+ or MB4C
 ;	hasAY8913 = %0011,%0111,%1011,%1111 - for Phasor (NB. only test for 2nd AYs if 1st AYs = %11)
 
 	lda		zpTmp1
@@ -23,15 +64,67 @@ DetectAY8913
 		jsr		SetPhasorMode
 +
 
-!if 0 {		; comment out this mb-audit specific code
-	lda		isMB4C
-	ora		isEchoPlus
+	lda		isMegaAudioCard		; Doesn't support AY register reads
+	ora		isMB4C				; TODO: support MB4C (just like a regular Mockingboard?)
+	ora		isSDMusic			; TODO: support SD Music (just like a regular Mockingboard?)
 	beq		+
 		lda		#%00000011
-		sta		hasAY8913		; can't test them, so just assume they are all working
+		sta		hasAY8913		; For now just assume they are all working
 		rts
 +
-}
+
+	lda		isEchoPlus			; Echo+ AY detection
+	beq		@mb
+
+	lda		#SY6522_A_BASE		; only one 6522, but use zpTmp3 (6522-A or 6522-B) to config chip-select
+	sta		zpTmp3
+	lda		#1					; hasAY8913 mask
+	sta		zpTmp2
+
+-		jsr		Init6522ForAY
+
+		lda		#AY_AFINE
+		ldy		#$AA
+		jsr		AY_Echo_WriteRegValueEx
+
+		lda		#AY_BFINE
+		ldy		#$55
+		jsr		AY_Echo_WriteRegValueEx
+
+		lda		#AY_CFINE
+		ldy		#$69
+		jsr		AY_Echo_WriteRegValueEx
+
+		;
+
+		ldy		#AY_AFINE
+		jsr		AY_Echo_ReadRegValueEx
+		cmp		#$AA
+		bne		+
+
+		ldy		#AY_BFINE
+		jsr		AY_Echo_ReadRegValueEx
+		cmp		#$55
+		bne		+
+
+		ldy		#AY_CFINE
+		jsr		AY_Echo_ReadRegValueEx
+		cmp		#$69
+		bne		+
+
+			lda		hasAY8913
+			ora		zpTmp2
+			sta		hasAY8913
+
++		asl		zpTmp2			; AY mask <<= 1
+		lda		zpTmp3
+		eor		#$80
+		sta		zpTmp3
+		bne		-
+
+		rts
+
+@mb	; Mockingboard
 
 	lda		#SY6522_A_BASE
 	sta		zpTmp3
@@ -396,3 +489,111 @@ AY2_ReadRegValue
 	jsr		AY2_SelectReg
 	jsr		AY_SetPortAInput
 	jmp		AY2_ReadReg
+
+;------------------------------------------------------------------------------
+; Echo+ routines:
+
+AY_Echo_SelectReg
+; Pre: X = [AY_ECHO_CS1|AY_ECHO_CS2]|AY_LATCH
+;	A = reg#
+; Post: X is preserved, Y trashed
+	ldy		#SY6522_A_BASE+SY6522_ORA
+	sta		(MBBase),y
+	dey						; Y = ORB (reg#0)
+	txa						; A = CS_ECHO_x|AY_LATCH
+	sta		(MBBase),y
+	and		#$1C			; A = CS_ECHO_x|AY_INACTIVE
+	sta		(MBBase),y
+	rts
+
+;
+
+AY_Echo_WriteReg
+; Pre: X = [AY_ECHO_CS1|AY_ECHO_CS2]|AY_LATCH
+;	6522.DDRA = $FF (Port-A direction = output)
+;	A = data
+; Post: X is preserved, Y trashed
+;	Z = 0
+	ldy		#SY6522_A_BASE+SY6522_ORA
+	sta		(MBBase),y
+	dey						; Y = ORB (reg#0)
+	txa
+	and		#$1E			; A = CS_ECHO_x|AY_WRITE
+	sta		(MBBase),y
+	and		#$1C			; A = CS_ECHO_x|AY_INACTIVE
+	sta		(MBBase),y
+	rts
+
+;
+
+AY_Echo_ReadReg
+; Pre: X = [AY_ECHO_CS1|AY_ECHO_CS2]|AY_LATCH
+;	6522.DDRA = $00 (Port-A direction = input)
+; Post: X is preserved, Y trashed
+;	A = data
+;	Z = 0
+	ldy		#SY6522_A_BASE+SY6522_ORB
+	txa
+	and		#$1D			; A = CS_ECHO_x|AY_READ
+	sta		(MBBase),y
+	iny						; Y = ORA (reg#1)
+	lda		(MBBase),y		; Read Port-A
+	pha
+	txa
+	and		#$1C			; A = CS_ECHO_x|AY_INACTIVE
+	dey						; Y = ORB (reg#0)
+	sta		(MBBase),y
+	pla
+	rts
+
+;--------------------------------------
+
+AY_Echo_WriteRegValueEx
+; Pre: zpTmp3 = SY6522_A_BASE, SY6522_B_BASE - used to config chip-select
+	ldx		zpTmp3
+	bne		+
+	ldx		#AY_ECHO_CS1|AY_LATCH
+	bne		AY_Echo_WriteRegValue
++	ldx		#AY_ECHO_CS2|AY_LATCH
+	; fall through...
+
+AY_Echo_WriteRegValue
+; Pre: X = [AY_ECHO_CS1|AY_ECHO_CS2]|AY_LATCH
+;	A=reg#
+;	Y=value
+; Post:
+;	X is preserved, Y trashed
+;	Z = 0
+;	zpTmp5 trashed
+	sty		zpTmp5			; save value
+	jsr		AY_Echo_SelectReg
+	lda		zpTmp5			; restore value
+	jmp		AY_Echo_WriteReg
+
+;
+
+AY_Echo_ReadRegValueEx
+; Pre: zpTmp3 = SY6522_A_BASE, SY6522_B_BASE - used to config chip-select
+	ldx		zpTmp3
+	bne		+
+	ldx		#AY_ECHO_CS1|AY_LATCH
+	bne		AY_Echo_ReadRegValue
++	ldx		#AY_ECHO_CS2|AY_LATCH
+	; fall through...
+
+AY_Echo_ReadRegValue
+; Pre: X = [AY_ECHO_CS1|AY_ECHO_CS2]|AY_LATCH
+;	Y=reg#
+; Post:
+;	A=value
+;	X is preserved, Y trashed
+;	Z = 0
+	tya
+	pha						; save reg#
+	ldy		#SY6522_A_BASE+SY6522_ORA
+	jsr		AY_SetPortAOutput
+	pla						; restore reg#
+	jsr		AY_Echo_SelectReg
+	ldy		#SY6522_A_BASE+SY6522_ORA
+	jsr		AY_SetPortAInput
+	jmp		AY_Echo_ReadReg
