@@ -124,6 +124,8 @@ DetectAY8913
 
 		rts
 
+		;------------------------------
+
 @mb	; Mockingboard
 
 	lda		#SY6522_A_BASE
@@ -176,10 +178,7 @@ DetectAY8913
 		bne		-
 
 	lda		isPhasorCard
-	beq		+
-	lda		#%00000011
-	cmp		hasAY8913
-	bne		@ok
+	beq		@done
 
 	;
 	; Phasor: detect any 2nd-ary AYs
@@ -246,7 +245,8 @@ DetectAY8913
 
 	;
 
-@ok	rts
+@done
+	rts
 
 ;------------------------------------------------------------------------------
 
