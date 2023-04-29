@@ -1012,7 +1012,6 @@ DetectSubunits
 ;	jsr		DetectSC01				; pre: zpTmp1
 	jsr		DetectAY8913			; pre: zpTmp1
 
-!if 0 {
 	lda		hasAY8913
 	asl
 	asl
@@ -1032,7 +1031,6 @@ DetectSubunits
 +
 
 	sta		slotInfo,x				; slotInfo[slot] |= (hasAY8913 << 4)
-}
 
 	;
 	; set slotInfo2
@@ -1667,7 +1665,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v1.0, Tom Charlesworth, 2023",$d
+msg_title	!text "Tune test v1.1, Tom Charlesworth, 2023",$d
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
