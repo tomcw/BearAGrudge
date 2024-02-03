@@ -1385,6 +1385,8 @@ DisplayCardUpdate
 	bne		+
 		lda		isSDMusic
 		bne		@sdm
+		lda		isEchoPlus
+		bne		@ep
 		lda		#$80+'?'		; don't know what this is!
 		sta		LINE3+SLOT1POS,x
 
@@ -1405,7 +1407,7 @@ DisplayCardUpdate
 			bne		@out
 +		lda		isEchoPlus
 		beq		+
-			lda		#$80+'E'
+@ep			lda		#$80+'E'
 			bne		@out
 +		lda		isSDMusic
 		beq		+
@@ -1665,7 +1667,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v1.1, Tom Charlesworth, 2023",$d
+msg_title	!text "Tune test v1.2, Tom Charlesworth,2023-24"
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d

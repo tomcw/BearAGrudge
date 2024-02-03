@@ -7,7 +7,9 @@ SY6522_A_PH_BASE = $10	; Phasor mode (this is common to both MB & Phasor modes)
 SY6522_B_BASE = $80
 
 SY6522_ORB = 0
+SY6522_IRB = 0
 SY6522_ORA = 1
+SY6522_IRA = 1
 SY6522_DDRB = 2
 SY6522_DDRA = 3
 SY6522_TIMER1L_COUNTER = 4
@@ -60,12 +62,13 @@ AY_DIS_A	= %00001001	; Disable A (Noise & Tone)
 AY_DIS_B	= %00010010	; Disable B (Noise & Tone)
 AY_DIS_C	= %00100100	; Disable C (Noise & Tone)
 
-; AY inputs on BDIR|BC2|BC1:
-AY_RESET	= 0
-AY_INACTIVE	= 4
-AY_READ		= 5
-AY_WRITE	= 6
-AY_LATCH	= 7
+; 6522 ORB bit:          2    1    0
+; AY inputs on:       /RESET|BDIR|BC1: (BC2=1)
+AY_RESET    = 0     ;    0    -    -
+AY_INACTIVE = 4     ;    1    0    0
+AY_READ     = 5     ;    1    0    1
+AY_WRITE    = 6     ;    1    1    0
+AY_LATCH    = 7     ;    1    1    1
 AY_FUNC_MASK = %00000111
 ; Phasor extra chip-select bits (when in native Phasor mode):
 AY_NOT_CS1	= $10
@@ -73,10 +76,12 @@ AY_NOT_CS2	= $08
 AY_CS1		= AY_NOT_CS2
 AY_CS2		= AY_NOT_CS1
 AY_NO_CS	= AY_NOT_CS1|AY_NOT_CS2	; each CS is active low
+AY_BOTH_CS	= $00
 ; Echo+ extra chip-select bits:
 AY_ECHO_CS1	= $08
 AY_ECHO_CS2	= $10
-AY_ECHO_NO_CS	= $00	; each CS is active high
+AY_ECHO_NO_CS	= AY_ECHO_CS1|AY_ECHO_CS2	; each CS is active low
+AY_ECHO_BOTH_CS	= $00
 
 ; SSI263:
 SSI_DURPHON = 0
