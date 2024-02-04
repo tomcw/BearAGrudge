@@ -712,10 +712,12 @@ Interrupt
 	;
 
 	ldx		#0			; default: Mockingboard
+	lda		isEchoPlus
+	bne		@ph_ep
 	lda		phasorMode
-	cmp		#PH_PHASOR
-	bne		+
-		ldx		#AY_CS1
+	cmp		#PH_MOCKINGBOARD
+	beq		+
+@ph_ep	ldx		#AY_CS1	; Phasor in native mode, Phasor in Echo+ mode or Echo+
 +	stx		AYChipSelect
 
 	lda		AYMute_user
@@ -767,6 +769,16 @@ muteAY0
 
 +
 
+		lda		isEchoPlus
+		beq		+
+			; Echo+ or Phasor in Echo+ mode
+			; . allow keys '1' and '2' to operate on each respective "1st AY in pair"
+			lda		AYMute_irq
+			and		#%00000001
+			sta		AYMute_irq
+			jmp		skip2ndAY
++
+
 		;
 		; 2nd AY in pair
 		;
@@ -796,6 +808,7 @@ muteAY1
 		jsr		MuteAY
 
 +
+skip2ndAY
 
 	lda		AYChipSelect
 	asl
