@@ -180,6 +180,7 @@ INIT:
 		ldx		slotUnderTest
 		lda		slotInfo,x
 		beq		+
+			and		#3
 			sta		has6522
 			jsr		DisplaySlotUpdate
 			ldx		slotUnderTest
@@ -1241,6 +1242,35 @@ isIIc
 	lda		VERSION3
 	cmp		VERSION3_IIC
 +	rts
+
+;------------------------------------------------------------------------------
+
+@myWAIT_prealign
+!align 255, 0, $EA		; align to 256 bytes (pad with $EA's)
+!warn "myWAIT padding = ", * - @myWAIT_prealign
+
+; Copy of the II ROM's WAIT routine.
+;
+; WAIT on a IIgs is not cycle accurate, since the WAIT description says it waits a minimum number of microseconds.
+; The IIgs ROM has extra code to ensure the CPU is running at slow speed, and this adds extra time.
+
+myWAIT
+	sec
+.x0
+-	pha
+.x1
+--		sbc		#1
+		bne		--
+!if >.x1 != >* {
+      !serious "branch crosses a page"
+}
+	pla
+	sbc		#1
+	bne		-
+!if >.x0 != >* {
+      !serious "branch crosses a page"
+}
+	rts
 
 ;------------------------------------------------------------------------------
 

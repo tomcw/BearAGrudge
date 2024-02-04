@@ -246,6 +246,8 @@ Check6522
 Check6522Datalines
 ; Pre: zpTmp1 = slotInfo[slot]
 ; Post: C=0(OK), C=1(NG)
+;	On C=1: X=expected, A=actual
+; Uses: zpTmp2, zpTmp3
 
 	; Just return OK if same 6522 is mapped to both $00 and $80
 	jsr		DetectMB4CorEchoPlusorSDM
@@ -261,8 +263,8 @@ Check6522Datalines
 	;                 1st loop  2nd loop
 	; 6522-A:  DDRB =   $55       $AA
 	; 6522-A:  DDRA =   $AA       $55
-	; 6522-B:  DDRB =   $96       $69
-	; 6522-B:  DDRA =   $69       $96
+	; 6522-B:  DDRB =   $69       $96
+	; 6522-B:  DDRA =   $96       $69
 	; check A: DDRB ==  $55       $AA
 	; check A: DDRA ==  $AA       $55
 	; check B: DDRB ==  $69       $96
