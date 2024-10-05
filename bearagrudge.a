@@ -23,9 +23,9 @@ ZP_BASE = $f0
 
 zpTmp5 = $f5
 zpTmp3 = $f6
-zpTmp2 = $f7
-zpTmp1 = $f8
-String = $f7		; alias with zpTmp2 & zpTmp1
+zpTmp2 = $f7		; alias with pAYPatternL
+zpTmp1 = $f8		; alias with pAYPatternH
+String = $f7		; alias with zpTmp2 & zpTmp1 & pAYPatternL
 StringL = String
 StringH = String+1
 
@@ -530,15 +530,14 @@ done
 ;--------------------------------------
 
 UpdateActiveAYs
-
 	ldy		#ACTIVE_AY_HPOS		; offset to "1234"
 	lda		AYMute_user
-	sta		zpTmp1
+	sta		zpTmp3
 
 -	lda		(BASL),y
 	cmp		#' '+$80			; end of string?
 	beq		@done
-	lsr		zpTmp1
+	lsr		zpTmp3
 	bcc		@inactive
 ;@active
 		lda		(BASL),y
