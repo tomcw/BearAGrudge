@@ -247,6 +247,8 @@ exit
 
 ;------------------------------------------------------------------------------
 
+ACTIVE_AY_HPOS = 17				; offset to "1234" in msg_activeAY
+
 PlayTune
 ; Pre: MBBaseL,H
 
@@ -266,7 +268,19 @@ PlayTune
 	lda		#<msg_instructionsEsc
 	ldx		#>msg_instructionsEsc
 	jsr		Print
-	jsr		RestoreHV
+
+	lda		#<msg_activeAY		; no CR
+	ldx		#>msg_activeAY
+	jsr		Print
+
+	lda		isPhasorCard
+	bne		+
+		lda		#' '+$80		; if MB, then blank out the "34" chars
+		ldy		#ACTIVE_AY_HPOS+2	; offset to "34"
+		sta		(BASL),y
+		iny
+		sta		(BASL),y
++	jsr		UpdateActiveAYs
 
 	;
 
@@ -407,6 +421,7 @@ loop	lda		State
 			lda		#8
 ++			eor		AYMute_user
 			sta		AYMute_user
+			jsr		UpdateActiveAYs
 			jmp		loop
 +
 
@@ -477,6 +492,37 @@ done
 		jsr		SetPhasorMode
 +
 
+	jsr		RestoreHV
+
+	rts
+
+;--------------------------------------
+
+UpdateActiveAYs
+
+	ldy		#ACTIVE_AY_HPOS		; offset to "1234"
+	lda		AYMute_user
+	sta		zpTmp1
+
+-	lda		(BASL),y
+	cmp		#' '+$80			; end of string?
+	beq		@done
+	lsr		zpTmp1
+	bcc		@inactive
+;@active
+		lda		(BASL),y
+		and		#$7f
+		sta		(BASL),y
+		bne		+				; (bra)
+@inactive
+		lda		(BASL),y
+		ora		#$80
+		sta		(BASL),y
+
++		iny
+		bne		-
+
+@done
 	rts
 
 ;--------------------------------------
@@ -1710,7 +1756,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v1.2, Tom Charlesworth,2023-24"
+msg_title	!text "Tune test v1.3, Tom Charlesworth,2023-24"
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
@@ -1723,6 +1769,10 @@ msg_instructionsPH !text "Press 1-4 to toggle tune on 4x AY chips",$d
 msg_instructionsPHEnd !text 0
 msg_instructionsEsc !text "ESC to quit",$d
 msg_instructionsEscEnd !text 0
+
+;                   0123456789012345678901234567890123456789
+msg_activeAY !text "Active AY chips: 1234"	; NB. No CR for this msg
+msg_activeAYEnd !text 0
 
 msg_cpu6502Detected !text "6502 detected",$d
 msg_cpu6502DetectedEnd !text 0
