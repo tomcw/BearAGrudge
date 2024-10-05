@@ -210,11 +210,6 @@ INIT:
 
 	;
 
-	lda		#<msg_OK
-	ldx		#>msg_OK
-	jsr		Print
-	jmp		exit
-
 waitKeyAndExit
 	lda		#<msg_PressAnyKey
 	ldx		#>msg_PressAnyKey
@@ -1901,11 +1896,8 @@ msg_TestFailed6522AEnd !text 0
 msg_TestFailed6522B !text "Mockingboard failed test: 6522B",$d
 msg_TestFailed6522BEnd !text 0
 
-msg_PressAnyKey !text "Press any key to continue",0xd
+msg_PressAnyKey !text $d,$d,$d,"Press any key to continue",$d
 msg_PressAnyKeyEnd !text 0
-
-msg_OK !text $d,$d,$d,"Done",$d
-msg_OKEnd !text 0
 
 ;
 
