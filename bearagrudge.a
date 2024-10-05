@@ -163,8 +163,13 @@ INIT:
 			lda		#<msg_cpu65816Detected
 			ldx		#>msg_cpu65816Detected
 +	jsr		Print
+	lda		#$80+$0a
+	jsr		COUT
 
-	lda		#$80+$0d
+	lda		#<msg_tuneTitle
+	ldx		#>msg_tuneTitle
+	jsr		Print
+	lda		#$80+$0a
 	jsr		COUT
 
 	lda		#0
@@ -268,9 +273,6 @@ PlayTune
 ; Pre: MBBaseL(=$00),H
 
 	jsr		SaveHV
-	lda		#<msg_tuneTitle
-	ldx		#>msg_tuneTitle
-	jsr		Print
 
 	lda		#<msg_instructionsMB
 	ldx		#>msg_instructionsMB
@@ -280,13 +282,16 @@ PlayTune
 		ldx		#>msg_instructionsPH
 +	jsr		Print
 
-	lda		#<msg_instructionsEsc
+	lda		#<msg_instructionsEsc	; no CR
 	ldx		#>msg_instructionsEsc
 	jsr		Print
+	jsr		CLREOL
+	jsr		CROUT
 
 	lda		#<msg_activeAY		; no CR
 	ldx		#>msg_activeAY
 	jsr		Print
+	jsr		CLREOL
 
 	lda		isPhasorCard
 	bne		+
@@ -1870,7 +1875,7 @@ msg_instructionsMB !text "Press 1-2 to toggle tune on 2x AY chips",$d
 msg_instructionsMBEnd !text 0
 msg_instructionsPH !text "Press 1-4 to toggle tune on 4x AY chips",$d
 msg_instructionsPHEnd !text 0
-msg_instructionsEsc !text "ESC to quit",$d
+msg_instructionsEsc !text "ESC to quit"	; NB. No CR for this msg
 msg_instructionsEscEnd !text 0
 
 ;                   0123456789012345678901234567890123456789
@@ -1896,7 +1901,7 @@ msg_TestFailed6522AEnd !text 0
 msg_TestFailed6522B !text "Mockingboard failed test: 6522B",$d
 msg_TestFailed6522BEnd !text 0
 
-msg_PressAnyKey !text $d,$d,$d,"Press any key to continue",$d
+msg_PressAnyKey !text $a,$a,$a,"Press any key to continue",$d
 msg_PressAnyKeyEnd !text 0
 
 ;
