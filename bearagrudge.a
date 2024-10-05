@@ -250,7 +250,7 @@ exit
 ACTIVE_AY_HPOS = 17				; offset to "1234" in msg_activeAY
 
 PlayTune
-; Pre: MBBaseL,H
+; Pre: MBBaseL(=$00),H
 
 	jsr		SaveHV
 	lda		#<msg_tuneTitle
@@ -300,8 +300,6 @@ PlayTune
 	sta		MB5y+2
 	sta		MB6y+2
 
-	sta		MB7+2
-
 	;
 
 	; TODO: make this user-selectable, and default to MB mode
@@ -345,19 +343,29 @@ PlayTune
 
 	sei
 
+	; Support case where 6522-A isn't detected, ie. use 6522-B for Timer1 IRQ
+	ldx		#SY6522_A_PH_BASE
+	lda		has6522
+	and		#HAS_6522A
+	bne		+
+		ldx		#SY6522_B_BASE
++	stx		MBBaseL
+
+	;
+
 	lda		#<TIMER_INTERVAL
-	ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
+	ldy		#SY6522_TIMER1L_COUNTER
 	sta		(MBBase),y
 	lda		#>TIMER_INTERVAL
-	ldy		#SY6522_TIMER1H_COUNTER+SY6522_A_PH_BASE
+	ldy		#SY6522_TIMER1H_COUNTER
 	sta		(MBBase),y
 
 	lda		#ACR_FREERUNNING
-	ldy		#SY6522_ACR+SY6522_A_PH_BASE
+	ldy		#SY6522_ACR
 	sta		(MBBase),y				; Free running timer
 
 	lda		#IER_SET|IxR_TIMER1
-	ldy		#SY6522_IER+SY6522_A_PH_BASE
+	ldy		#SY6522_IER
 	sta		(MBBase),y				; Enable Timer1 IRQ
 
 	lda		#<Interrupt
@@ -431,7 +439,7 @@ pause	; step via one-shot mode
 
 		sei
 		lda		#ACR_ONESHOT
-		ldy		#SY6522_ACR+SY6522_A_PH_BASE
+		ldy		#SY6522_ACR
 		sta		(MBBase),y
 		lda		nFrameNum+2
 		cli
@@ -447,10 +455,10 @@ pause	; step via one-shot mode
 		tax		; keycode
 
 		lda		#<TIMER_INTERVAL
-		ldy		#SY6522_TIMER1L_COUNTER+SY6522_A_PH_BASE
+		ldy		#SY6522_TIMER1L_COUNTER
 		sta		(MBBase),y
 		lda		#>TIMER_INTERVAL
-		ldy		#SY6522_TIMER1H_COUNTER+SY6522_A_PH_BASE
+		ldy		#SY6522_TIMER1H_COUNTER
 		sta		(MBBase),y
 
 		cpx		#' '+$80
@@ -458,7 +466,7 @@ pause	; step via one-shot mode
 
 		; restart
 		lda		#ACR_FREERUNNING
-		ldy		#SY6522_ACR+SY6522_A_PH_BASE
+		ldy		#SY6522_ACR
 		sta		(MBBase),y				; Free running timer
 		jmp		loop
 
@@ -467,22 +475,17 @@ pause	; step via one-shot mode
 done
 
 	sei
-		ldy		#SY6522_A_PH_BASE
-		jsr		SF_ChipReset
-		ldy		#SY6522_B_BASE
-		jsr		SF_ChipReset
-
 		lda		#ACR_ONESHOT
-		ldy		#SY6522_ACR+SY6522_A_PH_BASE
+		ldy		#SY6522_ACR
 		sta		(MBBase),y
 
-		ldy		#SY6522_IFR+SY6522_A_PH_BASE
+		ldy		#SY6522_IFR
 -			lda		(MBBase),y
 			and		#IxR_TIMER1
 			beq		-
 
 		lda		#IER_CLR|IxR_TIMER1
-		ldy		#SY6522_IER+SY6522_A_PH_BASE
+		ldy		#SY6522_IER
 		sta		(MBBase),y				; Disable Timer1 IRQ
 	cli
 
@@ -491,6 +494,13 @@ done
 		lda		#PH_MOCKINGBOARD
 		jsr		SetPhasorMode
 +
+
+	lda		#0
+	sta		MBBaseL
+	ldy		#SY6522_A_PH_BASE+SY6522_ORB	; Resets all AYs on 6522-A
+	jsr		SF_ChipReset
+	ldy		#SY6522_B_BASE+SY6522_ORB		; Resets all AYs on 6522-B
+	jsr		SF_ChipReset
 
 	jsr		RestoreHV
 
@@ -891,7 +901,8 @@ skip2ndAY
 
 .done
 	lda		#IER_CLR|IxR_TIMER1
-MB7	sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_IFR	; Clear Timer1 IRQ flag
+	ldy		#SY6522_IFR
+	sta		(MBBase),y				; Clear Timer1 IRQ flag (may be using either 6522-A or 6522-B's Timer1)
 
 	pla
 	tay
@@ -906,6 +917,11 @@ MB7	sta		CARD_BASE+SY6522_A_PH_BASE+SY6522_IFR	; Clear Timer1 IRQ flag
 MuteAY:
 ; Pre: Y = SY6522_ORA for chip A or B
 
+	lda		MBBaseL
+	pha
+	lda		#0
+	sta		MBBaseL
+
 		lda		AYChipSelect
 		bne		+
 
@@ -913,7 +929,8 @@ MuteAY:
 			lda		#AY_ENABLE
 			jsr		SF_SelectReg
 			lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
-			jmp		SF_WriteReg
+			jsr		SF_WriteReg
+			jmp		@done
 
 +		and		#AY_CS1
 		beq		+
@@ -922,13 +939,19 @@ MuteAY:
 			lda		#AY_ENABLE
 			jsr		AY1_SelectReg
 			lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
-			jmp		AY1_WriteReg
+			jsr		AY1_WriteReg
+			jmp		@done
 
 +			; Phasor: AY-CS2
 			lda		#AY_ENABLE
 			jsr		AY2_SelectReg
 			lda		#AY_DIS_A|AY_DIS_B|AY_DIS_C
-			jmp		AY2_WriteReg
+			jsr		AY2_WriteReg
+
+@done
+	pla
+	sta		MBBaseL
+	rts
 
 ;------------------------------------------------------------------------------
 
