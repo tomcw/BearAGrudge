@@ -218,6 +218,7 @@ DetectMB4CorEchoPlusorSDM
 Check6522
 ; Pre: X=slot#
 ; Post: C=0(OK), C=1(NG)
+;	errorActual, errorExpected
 
 	jsr		SetMBBase
 
@@ -240,29 +241,272 @@ Check6522
 	sta		errorValid6522B
 	sta		@errorFlag
 
-	lda		#0
-	sta		testNum						; test #00
-	sta		subTestNum					; (not used for these tests, so just set to $00)
-	jsr		Check6522Datalines
-	bcc		+
-	inc		errorValid
+;@repeat	jsr		incSoakDisplayRept		; NB. "00:nn" - just inc's rept#nn
+
+		lda		#$ff
+		sta		testNum
+
+		; Test 6522-B first, then 6522-A
+		; . so that error codes are in the right order for printing!
+
+;@6522_B
+		lda		zpTmp1
+		and		#HAS_6522B
+		beq		@6522_A
+
+		lda		#COMPONENT_6522B		; test component $60
+		sta		testComponentNum
+
+		lda		#SY6522_B_BASE
+		sta		MBBaseL
+
+@next		inc		testNum				; test #00,04
+			jsr		Check6522Datalines1
+			bcs		@error
+
+			inc		testNum				; test #01,05
+			jsr		Check6522Datalines2
+			bcs		@error
+
+			inc		testNum				; test #02,06
+			jsr		Check6522Addrlines
+			bcs		@error
+
+			inc		testNum				; test #03,07
+			jsr		Check6522IRQ
+			bcs		@error
+
+@6522_A	lda		zpTmp1
+		and		#HAS_6522A
+		beq		@done
+
+		lda		MBBaseL
+		bpl		@done
+
+		lda		#$03
+		sta		testNum
+
+		lda		#COMPONENT_6522A		; test component $50
+		sta		testComponentNum
+
+		lda		#SY6522_A_BASE
+		sta		MBBaseL
+		beq		@next					; (bra)
+
+		;
+
+@done	lda		#SY6522_A_BASE
+		sta		MBBaseL
+
+		; if we've had an error from either 6522 then bail
+		lda		@errorFlag
+		bne		@errorDone
+
+		; else: no 6522 errors, so finish with this mixed test
+		lda		#COMPONENT_6522+0		; test component $10
+		sta		testComponentNum
+
+		lda		#$10
+		sta		testNum					; test #$10 (mixed test for 6522 A & B)
+		jsr		Check6522ABDatalines1	; Pre: MBBaseL = 0
+		bcs		@error
+
+;		jsr		incSoakTestNum
+;		bne		@repeat
+
+	clc		; C=0(OK)
 	rts
 
-+	inc		testNum						; test #01
-	jmp		Check6522IRQ
+@error
+; Pre: X = expected value
+;	A = actual value
+; Post: C=1(NG)
+
+	inc		@errorFlag
+
+	ldy		MBBaseL
+	bpl		+
+
+		; 6522-B failed, save error then test 6522-A
+		jsr		SetError6522B		; for 6522-B
+		jmp		@6522_A
+
++	jsr		SetError				; for 6522-A
+
+@errorDone
+	sec		; C=1(NG)
+	rts
 
 @errorFlag	!byte	0
 
 ;------------------
 
-Check6522Datalines
+Check6522Datalines1
+; Pre: MBBaseL
+; Post: C=0(OK), C=1(NG)
+;	On C=1: X=expected, A=actual
+; Uses: zpTmp2, zpTmp3
+
+	;
+	; Check r/w of all 8 data lines
+	;
+	;                 subTest:
+	;                 #0   #1   #2   #3
+	; 6522:  DDRB =   $55  $69  $AA  $96
+	; 6522:  DDRA =   $AA  $96  $55  $69
+	; check: DDRB ==  $55  $69  $AA  $96
+	; check: DDRA ==  $AA  $96  $55  $69
+
+	jsr		resetSubTestMinus1
+
+	lda		#0
+	sta		zpTmp2
+
+@loop	jsr		incSubTestNum			; subTest #0,2
+
+		ldy		#SY6522_DDRB
+		lda		#$55
+		eor		zpTmp2
+		sta		(MBBase),y
+		lda		#$aa
+		eor		zpTmp2
+		iny								; Y=SY6522_DDRA
+		sta		(MBBase),y
+
+		dey								; Y=SY6522_DDRB
+		lda		#$55
+		eor		zpTmp2
+		jsr		@check
+		bne		@6522_err
+		lda		#$aa
+		eor		zpTmp2
+		iny								; Y=SY6522_DDRA
+		jsr		@check
+		bne		@6522_err
+
+		;
+
+		jsr		incSubTestNum			; subTest #1,3
+
+		dey								; Y=SY6522_DDRB
+		lda		#$69
+		eor		zpTmp2
+		sta		(MBBase),y
+		lda		#$96
+		eor		zpTmp2
+		iny								; Y=SY6522_DDRA
+		sta		(MBBase),y
+
+		dey								; Y=SY6522_DDRB
+		lda		#$69
+		eor		zpTmp2
+		jsr		@check
+		bne		@6522_err
+		lda		#$96
+		eor		zpTmp2
+		iny								; Y=SY6522_DDRA
+		jsr		@check
+		bne		@6522_err
+
+		lda		#$ff
+		eor		zpTmp2
+		sta		zpTmp2
+		bne		@loop
+
+	clc									; OK
+	rts
+
+@6522_err
+; Pre: zpTmp3 = expected value
+;	A = actual value
+; Post: C=1(NG)
+	ldx		zpTmp3
+	sec
+	rts
+
+;
+
+@check
+	sta		zpTmp3						; expected
+	lda		(MBBase),y					; actual
+	cmp		zpTmp3
+	rts
+
+;------------------
+
+Check6522Datalines2
+; Pre: MBBaseL
+; Post: C=0(OK), C=1(NG)
+;	On C=1: X=expected, A=actual
+; Uses: zpTmp2, zpTmp3
+
+	;
+	; Check r/w of all 8 data lines
+	;
+	; loop n = {0,1,...$ff}
+	;   6522:  DDRB = n
+	;   6522:  DDRA = ~n
+	;   check: DDRB = n
+	;   check: DDRA = ~n
+	;
+
+	jsr		resetSubTest					; subTest #0
+	ldy		#SY6522_DDRB
+
+	lda		#0
+	sta		zpTmp2
+
+@6522_w		lda		zpTmp2
+			sta		(MBBase),y
+			iny								; Y=SY6522_DDRA
+			eor		#$ff
+			sta		(MBBase),y
+
+@6522_r		dey								; Y=SY6522_DDRB
+			lda		zpTmp2
+			jsr		@check
+			bne		@6522_err
+			iny								; Y=SY6522_DDRA
+			lda		zpTmp2
+			eor		#$ff
+			jsr		@check
+			bne		@6522_err
+			dey								; Y=SY6522_DDRB
+
+@next	inc		zpTmp2
+		bne		@6522_w
+
+@6522_ok
+	clc
+	rts
+
+@6522_err
+; Pre: zpTmp3 = expected value
+;	A = actual value
+; Post: C=1(NG)
+	ldx		zpTmp3
+	sec
+	rts
+
+;
+
+@check
+	sta		zpTmp3						; expected
+	lda		(MBBase),y					; actual
+	cmp		zpTmp3
+	rts
+
+;------------------
+
+Check6522ABDatalines1
 ; Pre: zpTmp1 = slotInfo[slot]
+;	MBBaseL = 0
 ; Post: C=0(OK), C=1(NG)
 ;	On C=1: X=expected, A=actual
 ; Uses: zpTmp2, zpTmp3
 
 	; Just return OK if same 6522 is mapped to both $00 and $80
-	jsr		DetectMB4CorEchoPlusorSDM
+	jsr		DetectMB4CorEchoPlusorSDM	; Pre: MBBaseL = 0
 	beq		+
 		clc
 		rts
@@ -270,6 +514,7 @@ Check6522Datalines
 
 	;
 	; Check r/w of all 8 data lines
+	; . NB. Check 6522-A interleaved with 6522-B (doesn't work with a single 6522 mapped at both $00 and $80)
 	; (NB. my real Phasor occasionally powers-on with r/w to 2nd 6522's DDRA with b7=1!)
 	;
 	;                 1st loop  2nd loop
@@ -282,10 +527,14 @@ Check6522Datalines
 	; check B: DDRB ==  $69       $96
 	; check B: DDRA ==  $96       $69
 
+	jsr		resetSubTestMinus1
+
 	lda		#0
 	sta		zpTmp2
 
 @loop
+		jsr		incSubTestNum			; subTest #0,1 (for 1st/2nd loop)
+
 ;@6522_A_w
 		lda		zpTmp1
 		and		#HAS_6522A
@@ -322,12 +571,12 @@ Check6522Datalines
 		ldy		#SY6522_A_BASE+SY6522_DDRB
 		lda		#$55
 		eor		zpTmp2
-		cmp		(MBBase),y
+		jsr		@check
 		bne		@6522_err
 		lda		#$aa
 		eor		zpTmp2
 		iny								; Y=SY6522_DDRA
-		cmp		(MBBase),y
+		jsr		@check
 		bne		@6522_err
 
 @6522_B_r
@@ -338,12 +587,12 @@ Check6522Datalines
 		ldy		#SY6522_B_BASE+SY6522_DDRB
 		lda		#$69
 		eor		zpTmp2
-		cmp		(MBBase),y
+		jsr		@check
 		bne		@6522_err
 		lda		#$96
 		eor		zpTmp2
 		iny								; Y=SY6522_DDRA
-		cmp		(MBBase),y
+		jsr		@check
 		bne		@6522_err
 
 @next
@@ -352,23 +601,114 @@ Check6522Datalines
 	sta		zpTmp2
 	bne		@loop
 
-@6522_ok
+;@6522_ok
 	clc
 	rts
 
 @6522_err
+; Pre: zpTmp3 = expected value
+;	A = actual value
+; Post: C=1(NG)
+	ldx		zpTmp3
 	sec
+	rts
+
+;
+
+@check
+	sta		zpTmp3						; expected
+	lda		(MBBase),y					; actual
+	cmp		zpTmp3
+	rts
+
+;------------------
+
+Check6522Addrlines
+; Pre: MBBaseL
+; Post: C=0(OK), C=1(NG)
+;	On C=1: X=expected, A=actual
+
+	jsr		resetSubTest				; subTest #0
+
+	cli									; No ints generated by this routine, so safe to enable ints
+										; Since IRQ/NMI handler hasn't been setup yet, then any spurious ints will exit to Monitor
+
+	; write
+	lda		#$AA
+	ldy		#SY6522_DDRA				; %0011 (a0)
+	sta		(MBBase),y
+	lda		#$55
+	ldy		#SY6522_DDRB				; %0010 (a1)
+	sta		(MBBase),y
+
+	lda		#$69
+	ldy		#SY6522_TIMER1H_LATCH		; %0111 (a2)
+	sta		(MBBase),y
+	lda		#IER_SET|IxR_TIMER1|IxR_TIMER2	; $E0
+	ldy		#SY6522_IFR
+	sta		(MBBase),y					; Clear any pending T1|T2 ints (just in case)
+	ldy		#SY6522_IER					; %1110 (a3)
+	sta		(MBBase),y					; NB. Writing IER with b7=1 will set the bits=1
+	eor		#$ff
+	sta		(MBBase),y					; NB. Writing IER with b7=0 will clear the bits=1
+
+	; read
+	lda		#$AA
+	ldy		#SY6522_DDRA				; %0011 (a0)
+	jsr		@check
+	bne		@6522_err
+	lda		#$55
+	ldy		#SY6522_DDRB				; %0010 (a1)
+	jsr		@check
+	bne		@6522_err
+
+	lda		#$69
+	ldy		#SY6522_TIMER1H_LATCH		; %0111 (a2)
+	jsr		@check
+	bne		@6522_err
+	lda		isMegaAudioCard
+	beq		+
+		lda		#IER_CLR|IxR_TIMER1|IxR_TIMER2	; $60 - MegaAudio always returns 6522.IER.b7=0
+		bne		++
++		lda		#IER_SET|IxR_TIMER1|IxR_TIMER2	; $E0 - Real 6522 always returns 6522.IER.b7=1
+++	ldy		#SY6522_IER					; %1110 (a3)
+	jsr		@check
+	bne		@6522_err
+	lda		#$7f
+	sta		(MBBase),y					; IER=0
+
+;@6522_ok
+	clc
+	rts
+
+@6522_err
+; Pre: zpTmp3 = expected value
+;	A = actual value
+; Post: C=1(NG)
+	ldx		zpTmp3
+	sec
+	rts
+
+;
+
+@check
+	sta		zpTmp3						; expected
+	lda		(MBBase),y					; actual
+	cmp		zpTmp3
 	rts
 
 ;------------------
 
 Check6522IRQ
-; Pre: zpTmp1 = slotInfo[slot]
+; Pre: MBBaseL
 ; Post: C=0(OK), C=1(NG)
+;	On C=1: X=expected, A=actual
 
 	;
 	; Check interrupt line(s)
 	;
+
+	jsr		resetSubTest
 
 	sei
 
@@ -376,37 +716,37 @@ Check6522IRQ
 	ldx		#>Check6522ISR
 	jsr		SetIrqNmiVectors
 
-;@6522_A_int
-	lda		zpTmp1
-	and		#HAS_6522A
-	beq		@6522_B_int
-
 	lda		#0
 	sta		isrNMIcount
 	sta		isrIFR_A
+	sta		isrIFR_B
 
 	lda		#1
-	ldy		#SY6522_A_BASE+SY6522_TIMER1L_COUNTER
+	ldy		#SY6522_TIMER1L_COUNTER
 	sta		(MBBase),y
 	iny									; Y=SY6522_TIMER1H_COUNTER
 	sta		(MBBase),y					; T1C=0x0101
 
 	lda		#ACR_ONESHOT
-	ldy		#SY6522_A_BASE+SY6522_ACR
+	ldy		#SY6522_ACR
 	sta		(MBBase),y
 
 	lda		#IER_SET|IxR_TIMER1
-	ldy		#SY6522_A_BASE+SY6522_IER
+	ldy		#SY6522_IER
 	sta		(MBBase),y
 
 	lda		#$f							; wait 0x304 cycles (and NMI may have occurred)
-	jsr		WAIT
+	jsr		myWAIT
 
+	lda		MBBaseL
+	bmi		@6522B
+
+;@6522A
 	lda		isrNMIcount
 	sta		isrNMIcount_A
 	bne		+							; NMI occurred, so IFR.TIMER1 already cleared!
 
-		ldy		#SY6522_A_BASE+SY6522_IFR
+		ldy		#SY6522_IFR				; subTest #0
 		lda		#IxR_TIMER1
 		and		(MBBase),y
 		beq		@6522_err
@@ -414,41 +754,17 @@ Check6522IRQ
 		cli
 		sei
 
+		jsr		incSubTestNum			; subTest #1
 		and		isrIFR_A
 		beq		@6522_err
+		bne		+						; (bra)
 
-+
-@6522_B_int
-	lda		zpTmp1
-	and		#HAS_6522B
-	beq		@6522_ok
-
-	lda		#0
-	sta		isrNMIcount
-	sta		isrIFR_B
-
-	lda		#1
-	ldy		#SY6522_B_BASE+SY6522_TIMER1L_COUNTER
-	sta		(MBBase),y
-	iny									; Y=SY6522_TIMER1H_COUNTER
-	sta		(MBBase),y					; T1C=0x0101
-
-	lda		#ACR_ONESHOT
-	ldy		#SY6522_B_BASE+SY6522_ACR
-	sta		(MBBase),y
-
-	lda		#IER_SET|IxR_TIMER1
-	ldy		#SY6522_B_BASE+SY6522_IER
-	sta		(MBBase),y
-
-	lda		#$f							; wait 0x304 cycles (and NMI may have occurred)
-	jsr		WAIT
-
+@6522B
 	lda		isrNMIcount
 	sta		isrNMIcount_B
 	bne		+							; NMI occurred, so IFR.TIMER1 already cleared!
 
-		ldy		#SY6522_B_BASE+SY6522_IFR
+		ldy		#SY6522_IFR				; subTest #0
 		lda		#IxR_TIMER1
 		and		(MBBase),y
 		beq		@6522_err
@@ -456,15 +772,19 @@ Check6522IRQ
 		cli
 		sei
 
+		jsr		incSubTestNum			; subTest #1
 		and		isrIFR_B
 		beq		@6522_err
 
 +
-@6522_ok
+
+;@6522_ok
 	clc
 	rts
 
 @6522_err
+	ldx		#IxR_TIMER1					; expected
+	lda		#0							; actual
 	sec
 	rts
 
@@ -491,6 +811,11 @@ Check6522ISR
 	; . otherwise reading & clear A first, means that B (read second) will always reads as 0.
 	; NB. Needed for Check6522IRQ, eg. for EchoPlus
 
+	ldx		MBBaseL						; save MBBaseL
+
+	lda		#SY6522_A_BASE
+	sta		MBBaseL
+
 	ldy		#SY6522_A_BASE+SY6522_IFR
 	lda		(MBBase),y
 	sta		isrIFR_A
@@ -504,6 +829,8 @@ Check6522ISR
 	ldy		#SY6522_A_BASE+SY6522_IFR
 	lda		isrIFR_A
 	sta		(MBBase),y					; clear 6522_A's IFR
+
+	stx		MBBaseL						; restore MBBaseL
 
 	;------
 

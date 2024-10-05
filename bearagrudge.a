@@ -145,7 +145,7 @@ INIT:
 		lda		#<msg_NoMB
 		ldx		#>msg_NoMB
 		jsr		Print
-		jmp		exit
+		jmp		waitKeyAndExit
 
 +	lda		#<msg_title
 	ldx		#>msg_title
@@ -187,7 +187,7 @@ INIT:
 			jsr		Check6522		; Basic 6522 checks - test both 6522s
 			bcc		++
 				jsr		PrintTestFailedErrBytesBoth6522s
-				; if either 6522 passed the tests then try to continue...
+				; if either 6522 passed the tests then try to continue with this MB...
 				lda		has6522
 				ldx		errorValid
 				beq		+++
@@ -198,8 +198,7 @@ INIT:
 +++				sta		has6522
 				sta		zpTmp1
 				tax
-				bne		++
-				jmp		waitKeyAndExit		; ...otherwise both 6522s failed so exit
+				beq		+					; ...otherwise move on to next MB
 ++			jsr		DetectSubunits	; ie. AY chips
 			ldx		slotUnderTest
 			jsr		DisplayCardUpdate
@@ -1291,10 +1290,13 @@ SetIrqVector
 
 ;------------------------------------------------------------------------------
 
-resetSubTest
+resetSubTestMinus1
+	lda		#$ff
+	bne		+
 
+resetSubTest
 	lda		#0
-	sta		subTestNum
++	sta		subTestNum
 	rts
 
 ;------------------------------------------------------------------------------
