@@ -140,7 +140,7 @@ INIT:
 	lda		HIRESOFF
 	jsr		HOME	; perhaps better to clear to $00? ie. for floating-bus reads in GetSlotInfo()
 
-	jsr		GetSlotInfo
+	jsr		GetSlotInfo				; Scan all slots (7->1) for 6522(s) by calling Detect6522()
 	bne		+
 		lda		#<msg_NoMB
 		ldx		#>msg_NoMB
@@ -184,10 +184,22 @@ INIT:
 			sta		has6522
 			jsr		DisplaySlotUpdate
 			ldx		slotUnderTest
-			jsr		Check6522		; Basic 6522 checks
+			jsr		Check6522		; Basic 6522 checks - test both 6522s
 			bcc		++
-				jsr		PrintTestFailed
-				jmp		exit
+				jsr		PrintTestFailedErrBytesBoth6522s
+				; if either 6522 passed the tests then try to continue...
+				lda		has6522
+				ldx		errorValid
+				beq		+++
+					and		#%11111110
++++				ldx		errorValid6522B
+				beq		+++
+					and		#%11111101
++++				sta		has6522
+				sta		zpTmp1
+				tax
+				bne		++
+				jmp		waitKeyAndExit		; ...otherwise both 6522s failed so exit
 ++			jsr		DetectSubunits	; ie. AY chips
 			ldx		slotUnderTest
 			jsr		DisplayCardUpdate
@@ -202,6 +214,15 @@ INIT:
 	lda		#<msg_OK
 	ldx		#>msg_OK
 	jsr		Print
+	jmp		exit
+
+waitKeyAndExit
+	lda		#<msg_PressAnyKey
+	ldx		#>msg_PressAnyKey
+	jsr		Print
+-		lda		KBD
+		bpl		-
+	lda		KBDSTRB
 
 	;
 
@@ -1301,16 +1322,30 @@ incTotalTests
 
 ;------------------------------------------------------------------------------
 
-isIIc
-; Post: Z=1 if //c
+SetError
+; Pre: X = expected; A = actual
 
-	lda		VERSION
-	cmp		#VERSION_IIE_OR_HIGHER
-	bne		+
+	inc		errorValid
+	stx		errorExpected
+	sta		errorActual
+	rts
 
-	lda		VERSION3
-	cmp		VERSION3_IIC
-+	rts
+;
+
+SetError6522B
+; Pre: X = expected; A = actual
+
+	inc		errorValid6522B
+	stx		errorExpected6522B
+	sta		errorActual6522B
+
+	lda		testComponentNum
+	sta		testComponentNum6522B
+	lda		testNum
+	sta		testNum6522B
+	lda		subTestNum
+	sta		subTestNum6522B
+	rts
 
 ;------------------------------------------------------------------------------
 
@@ -1340,6 +1375,19 @@ myWAIT
       !serious "branch crosses a page"
 }
 	rts
+
+;------------------------------------------------------------------------------
+
+isIIc
+; Post: Z=1 if //c
+
+	lda		VERSION
+	cmp		#VERSION_IIE_OR_HIGHER
+	bne		+
+
+	lda		VERSION3
+	cmp		#VERSION3_IIC
++	rts
 
 ;------------------------------------------------------------------------------
 
@@ -1634,18 +1682,41 @@ OutputNibble
 
 ;------------------------------------------------------------------------------
 
-PrintTestFailed		; No error bytes
-	jsr		PrintLineTestFailed
-	; (next line)
+;PrintTestFailed		; No error bytes
+;	jsr		PrintLineTestFailed
+;	; (next line)
+;	rts
+
+	;
+
+PrintTestFailedErrBytesBoth6522s
+	lda		errorValid
+	beq		+
+		jsr		PrintLineTestFailed6522A
++
+
+	lda		errorValid6522B
+	beq		+
+		jsr		PrintLineTestFailed6522B
++	rts
+
+	;
+
+PrintLineTestFailed6522A
+	jsr		PrintSlotNum
+
+	lda		#<msg_TestFailed6522A
+	ldx		#>msg_TestFailed6522A
+	jsr		Print
 	rts
 
 	;
 
-PrintLineTestFailed
+PrintLineTestFailed6522B
 	jsr		PrintSlotNum
 
-	lda		#<msg_TestFailed
-	ldx		#>msg_TestFailed
+	lda		#<msg_TestFailed6522B
+	ldx		#>msg_TestFailed6522B
 	jsr		Print
 	rts
 
@@ -1698,6 +1769,8 @@ COMPONENT_6522		= $10
 COMPONENT_AY8913	= $20
 ;COMPONENT_SC01		= $30
 ;COMPONENT_SSI263	= $40
+COMPONENT_6522A		= $50
+COMPONENT_6522B		= $60
 
 !source "chip-6522.a"
 !source "chip-ay8913.a"
@@ -1736,9 +1809,23 @@ is65C02or65816	!byte 0
 
 slotUnderTest	!byte 0
 
+errorValid		!byte 0
+errorValid6522B	!byte 0
+
+; NB. Keep these 5 vars consecutive so we can just do a copy to warningtestComponentNum,...,warningActual
 testComponentNum	!byte COMPONENT_CARD
 testNum			!byte 0
 subTestNum		!byte 0
+errorExpected	!byte 0
+errorActual		!byte 0
+
+; Keep error state of 6522-B, so that both 6522's can be tested
+testComponentNum6522B	!byte 0
+testNum6522B			!byte 0
+subTestNum6522B			!byte 0
+errorExpected6522B		!byte 0
+errorActual6522B		!byte 0
+
 totalTests		!byte 0,0,0
 
 isSDMusic		!byte 0
@@ -1771,9 +1858,6 @@ saveZPTextVars	!fill (BAS2H-CH)+1,0
 saveIRQL		!byte 0
 saveIRQH		!byte 0
 saveNMI			!byte 0,0,0
-
-;errorExpected	!byte 0
-;errorActual	!byte 0
 
 ;hasBeenReset	!byte 0
 ;userlandSP		!byte 0
@@ -1810,8 +1894,14 @@ msg_NoMBEnd !text 0
 msg_Slot !text "Slot #"	; 0
 msg_SlotEnd !text 0
 
-msg_TestFailed !text "Mockingboard failed test: 6522 "
-msg_TestFailedEnd !text 0
+msg_TestFailed6522A !text "Mockingboard failed test: 6522A",$d
+msg_TestFailed6522AEnd !text 0
+
+msg_TestFailed6522B !text "Mockingboard failed test: 6522B",$d
+msg_TestFailed6522BEnd !text 0
+
+msg_PressAnyKey !text "Press any key to continue",0xd
+msg_PressAnyKeyEnd !text 0
 
 msg_OK !text $d,$d,$d,"Done",$d
 msg_OKEnd !text 0
