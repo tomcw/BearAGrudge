@@ -17,6 +17,6 @@ Pre-pack the 11 bytes of AY regs into 8 bytes:
 chunks | chunk size | total compressed size
 -|-|-
 1| 40,202 | 7,382
-5| 8,186 x 4 + 7,466 | 7,933
+5| 8,186 x 4 + 7,466 | 7,933 (used this)
 6| 7,170 x 5 + 4,362 | 8,480
 6| 8,186 x 4 + 3,738 + 3,730 | 8,260
