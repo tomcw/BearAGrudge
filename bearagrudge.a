@@ -1864,7 +1864,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v1.3, Tom Charlesworth,2023-24"
+msg_title	!text "Tune test v1.4, Tom Charlesworth,2023-24"
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
