@@ -300,7 +300,9 @@ PlayTune
 		sta		(BASL),y
 		iny
 		sta		(BASL),y
-+	jsr		UpdateActiveAYs
++	lda		#AYMUTE_INIT
+	sta		AYMute_user
+	jsr		UpdateActiveAYs
 
 	;
 
@@ -400,8 +402,6 @@ PlayTune
 	sta		nFrameNum+2
 	sta		g_MusicUpdate
 	sta		g_PauseEnabled
-	lda		#%00001111
-	sta		AYMute_user
 
 	cli
 
@@ -1864,7 +1864,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v1.4, Tom Charlesworth,2023-24"
+msg_title	!text "Tune test v1.5, Tom Charlesworth,2023-25"
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
@@ -1909,7 +1909,8 @@ msg_PressAnyKeyEnd !text 0
 nMBBaseHi		!byte 0
 nFrameNum		!byte 0,0,0	; Minute:Second:FrameNum (@ 50Hz)
 g_MusicUpdate	!byte 0
-AYMute_user		!byte %00001111		; bit2=AY#3(Phasor-only), bit0=AY#2(Phasor-only), bit1=AY#1, bit0=AY#0
+AYMUTE_INIT = %00001111		; bit2=AY#3(Phasor-only), bit0=AY#2(Phasor-only), bit1=AY#1, bit0=AY#0
+AYMute_user		!byte AYMUTE_INIT
 AYMute_irq		!byte 0
 AYChipSelect	!byte 0
 g_PauseEnabled	!byte 0
