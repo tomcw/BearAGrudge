@@ -1,5 +1,5 @@
 ;license:MIT
-;(c) 2021-2022 by Tom Charlesworth
+;(c) 2021-2025 by Tom Charlesworth
 ;
 ; 6522 related
 ;
@@ -12,6 +12,9 @@ Detect6522
 
 	jsr		SetMBBase
 
+	jsr		isIIc			; TODO: Really should check for Jeff Mazur's product (in a //c)
+	beq		@checkT1_A		; Use TIMER1 (as MB4c's TIMER2 not readable when JeffM's product is also installed)
+
 	; 6522's IER.b7 is always 1
 	; . Due to floating bus (and the visible TEXT screen being mainly $A0 values), then empty slots will likely pass this IER.b7 check
 	ldy		#SY6522_A_BASE+SY6522_IER
@@ -22,6 +25,7 @@ Detect6522
 	; Could still be MegaAudio, so use TIMER1 (IER.b7 reads as 0, and TIMER2 isn't supported!)
 	;
 
+@checkT1_A
 	ldy		#SY6522_A_BASE+SY6522_TIMER1L_COUNTER
 	jsr		@Check6522
 	bne		+
@@ -901,9 +905,12 @@ WaitT2OneShotUnderflow
 	rts
 
 WaitT2Underflow
+	jsr		isIIc					; TODO: Really should check for Jeff Mazur's product (in a //c)
+	beq		@wait
 	lda		isMegaAudioCard
 	beq		+
-		rts							; Assume Mega Audio doesn't support Timer2!
+@wait	lda		#$8					; wait 0x119 cycles - MegaAudio & MB4c(w/JM's product) can't read Timer2!
+		jmp		myWAIT
 +
 
 	ldy		#SY6522_TIMER2H_COUNTER

@@ -1,5 +1,5 @@
 ;license:MIT
-;(c) 2023 by Tom Charlesworth
+;(c) 2023-2025 by Tom Charlesworth
 ;
 ; Bear A Grudge:
 ; . Playback tune on 2 (or 4) AY-3-8913's
@@ -1864,7 +1864,7 @@ saveNMI			!byte 0,0,0
 ;userlandSP		!byte 0
 
 ;                  0123456789012345678901234567890123456789
-msg_title	!text "Tune test v1.5, Tom Charlesworth,2023-25"
+msg_title	!text "Tune test v1.5A,Tom Charlesworth,2023-25"
 msg_titleEnd !text 0
 
 msg_tuneTitle	!text "Bear A Grudge, (C) Dave Rogers, 1988",$d
