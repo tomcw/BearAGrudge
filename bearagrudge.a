@@ -1548,6 +1548,8 @@ DisplayCardUpdate
 		bne		@sdm
 		lda		isEchoPlus
 		bne		@ep
+		lda		isMB4C
+		bne		@mb4c
 		lda		#$80+'?'		; don't know what this is!
 		sta		LINE3+SLOT1POS,x
 
@@ -1560,7 +1562,7 @@ DisplayCardUpdate
 			bne		@out
 +		lda		isMB4C
 		beq		+
-			lda		#$80+'M'	; 'M4C'
+@mb4c		lda		#$80+'M'	; 'M4C'
 			sta		zpTmp1
 			lda		#$80+'C'
 			sta		zpTmp2
